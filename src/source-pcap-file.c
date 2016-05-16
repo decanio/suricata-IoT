@@ -332,6 +332,10 @@ TmEcode ReceivePcapFileThreadInit(ThreadVars *tv, void *initdata, void **data)
         case LINKTYPE_NULL:
             pcap_g.Decoder = DecodeNull;
             break;
+        case LINKTYPE_IEEE802_15_4:
+        case LINKTYPE_IEEE802_15_4_NOFCS:
+            pcap_g.Decoder = DecodeIEEE802Dot15Dot4;
+            break;
 
         default:
             SCLogError(SC_ERR_UNIMPLEMENTED, "datalink type %" PRId32 " not "
