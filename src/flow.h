@@ -105,6 +105,9 @@ typedef struct AppLayerParserState_ AppLayerParserState;
 #define FLOW_FILE_NO_SIZE_TS              0x40000000
 #define FLOW_FILE_NO_SIZE_TC              0x80000000
 
+/* flow is zigbee */
+#define FLOW_ZIGBEE                      0x100000000
+
 #define FLOW_IS_IPV4(f) \
     (((f)->flags & FLOW_IPV4) == FLOW_IPV4)
 #define FLOW_IS_IPV6(f) \
@@ -165,7 +168,21 @@ typedef struct AppLayerParserState_ AppLayerParserState;
         (a)->addr_data32[2] = (p)->ip6h->s_ip6_dst[2];  \
         (a)->addr_data32[3] = (p)->ip6h->s_ip6_dst[3];  \
     } while (0)
+    
+#define FLOW_SET_ZIGBEE_SRC_ADDR_FROM_PACKET(p, a) do {             \
+        (a)->addr_data32[0] = (uint32_t)(p)->zigbeeh->source_address; \
+        (a)->addr_data32[1] = 0;                                  \
+        (a)->addr_data32[2] = 0;                                  \
+        (a)->addr_data32[3] = 0;                                  \
+    } while (0)
 
+#define FLOW_SET_ZIGBEE_DST_ADDR_FROM_PACKET(p, a) do {             \
+        (a)->addr_data32[0] = (uint32_t)(p)->zigbeeh->dest_address; \
+        (a)->addr_data32[1] = 0;                                  \
+        (a)->addr_data32[2] = 0;                                  \
+        (a)->addr_data32[3] = 0;                                  \
+    } while (0)
+    
 /* pkt flow flags */
 #define FLOW_PKT_TOSERVER               0x01
 #define FLOW_PKT_TOCLIENT               0x02
@@ -313,6 +330,7 @@ typedef struct Flow_
     uint8_t proto;
     uint8_t recursion_level;
     uint16_t vlan_id[2];
+#define zigbee_pan_id vlan_id[0] /**< 802.15.4 PAN ID overlays vlan_id[0] */
 
     /** flow hash - the flow hash before hash table size mod. */
     uint32_t flow_hash;
@@ -341,7 +359,7 @@ typedef struct Flow_
     uint32_t probing_parser_toserver_alproto_masks;
     uint32_t probing_parser_toclient_alproto_masks;
 
-    uint32_t flags;
+    uint64_t flags;
 
 #ifdef FLOWLOCK_RWLOCK
     SCRWLock r;

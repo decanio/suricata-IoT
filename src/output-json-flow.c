@@ -142,6 +142,12 @@ static json_t *CreateJSONHeaderFromFlow(Flow *f, char *event_type)
         }
     }
 #endif
+    if (f->proto == PROTO_ZIGBEE) {
+        /* tuple */
+        json_object_set_new(js, "src_zigbee", json_integer(f->src.addr_data32[0]));
+        json_object_set_new(js, "dst_zigbee", json_integer(f->dst.addr_data32[0]));
+        return js;
+    }
     /* tuple */
     json_object_set_new(js, "src_ip", json_string(srcip));
     switch(f->proto) {
