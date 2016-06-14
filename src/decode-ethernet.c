@@ -86,8 +86,8 @@ int DecodeEthernet(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
                        len - ETHERNET_HEADER_LEN, pq);
             break;
         case ETHERNET_TYPE_802154:
-            DecodeIEEE802Dot15Dot4(tv, dtv, p, pkt + ETHERNET_HEADER_LEN,
-                                   len - ETHERNET_HEADER_LEN, pq);
+            DecodeIEEE802154(tv, dtv, p, pkt + ETHERNET_HEADER_LEN,
+                             len - ETHERNET_HEADER_LEN, pq);
             break;
         default:
             SCLogDebug("p %p pkt %p ether type %04x not supported", p,

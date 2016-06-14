@@ -78,7 +78,7 @@ enum PktSrcEnum {
 #include "decode-ipv6.h"
 #include "decode-icmpv4.h"
 #include "decode-icmpv6.h"
-#include "decode-ieee-802dot15dot4.h"
+#include "decode-ieee-802154.h"
 #include "decode-tcp.h"
 #include "decode-udp.h"
 #include "decode-sctp.h"
@@ -916,7 +916,7 @@ void DecodeUpdatePacketCounters(ThreadVars *tv,
 
 /* decoder functions */
 int DecodeEthernet(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
-int DecodeIEEE802Dot15Dot4(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
+int DecodeIEEE802154(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodeSll(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodePPP(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodePPPOESession(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
