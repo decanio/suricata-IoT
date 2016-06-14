@@ -105,7 +105,7 @@ static void DecodeIEEE802154HasPanId(IEEE802154FCF *fcf, uint32_t *has_src_pan_i
  * \retval TM_ECODE_OK or TM_ECODE_FAILED on serious error
  */
 
-int DecodeIEEE802Dot15Dot4(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
+int DecodeIEEE802154(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
                    uint8_t *pkt, uint16_t len, PacketQueue *pq)
 {
     IEEE802154FCF fcf;
