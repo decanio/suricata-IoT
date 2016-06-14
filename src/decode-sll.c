@@ -64,6 +64,10 @@ int DecodeSll(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p, uint8_t *pkt, ui
             DecodeVLAN(tv, dtv, p, pkt + SLL_HEADER_LEN,
                                  len - SLL_HEADER_LEN, pq);
             break;
+        case ETHERNET_TYPE_IEEE802154:
+            DecodeIEEE802Dot15Dot4(tv, dtv, p, pkt + SLL_HEADER_LEN,
+                                   len - SLL_HEADER_LEN, pq);
+            break;
         default:
             SCLogDebug("p %p pkt %p sll type %04x not supported", p,
                        pkt, ntohs(sllh->sll_protocol));
