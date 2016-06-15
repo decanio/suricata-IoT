@@ -123,7 +123,7 @@ int DecodeZigBee(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
     /* if everything about the packet looked like ZigBee then count it */
     if (rc == TM_ECODE_OK) {
         p->proto = PROTO_ZIGBEE;
-        FlowHandlePacket(tv, dtv, p);
+        FlowSetupPacket(p);
         StatsIncr(tv, dtv->counter_zigbee);
     }
     
