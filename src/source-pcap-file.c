@@ -333,8 +333,10 @@ TmEcode ReceivePcapFileThreadInit(ThreadVars *tv, void *initdata, void **data)
             pcap_g.Decoder = DecodeNull;
             break;
         case LINKTYPE_IEEE802_15_4:
-        case LINKTYPE_IEEE802_15_4_NOFCS:
             pcap_g.Decoder = DecodeIEEE802154;
+            break;
+        case LINKTYPE_IEEE802_15_4_NOFCS:
+            pcap_g.Decoder = DecodeIEEE802154NoFCS;
             break;
 
         default:

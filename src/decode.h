@@ -118,6 +118,14 @@ typedef struct Address_ {
 #define addr_data16 address.address_un_data16
 #define addr_data8  address.address_un_data8
 
+#ifndef AF_ZIGBEE
+#define AF_ZIGBEE   (PF_MAX+1)
+#endif
+
+#ifndef AF_IEEE802154
+#define AF_IEEE802154 (PF+_MAX+2)
+#endif 
+
 #define COPY_ADDRESS(a, b) do {                    \
         (b)->family = (a)->family;                 \
         (b)->addr_data32[0] = (a)->addr_data32[0]; \
@@ -930,6 +938,7 @@ void DecodeUpdatePacketCounters(ThreadVars *tv,
 /* decoder functions */
 int DecodeEthernet(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodeIEEE802154(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
+int DecodeIEEE802154NoFCS(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodeSll(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodePPP(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodePPPOESession(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
