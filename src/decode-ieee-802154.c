@@ -216,7 +216,7 @@ static void DecodeIEEE802154HasPanId(IEEE802154FCF *fcf, uint32_t *has_src_pan_i
 }
 
 /**
- * \brief Function to decode XXX packets
+ * \brief Function to decode 802.15.4 packets
  * \param tv thread vars
  * \param dtv decoder thread vars
  * \param p packet
@@ -225,8 +225,8 @@ static void DecodeIEEE802154HasPanId(IEEE802154FCF *fcf, uint32_t *has_src_pan_i
  * \retval TM_ECODE_OK or TM_ECODE_FAILED on serious error
  */
 
-int DecodeIEEE802154(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
-                   uint8_t *pkt, uint16_t len, PacketQueue *pq)
+static int _DecodeIEEE802154(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
+                             uint8_t *pkt, uint16_t len, PacketQueue *pq, int fcs)
 {
     IEEE802154FCF fcf;
     uint16_t hdr_len;
@@ -244,12 +244,14 @@ int DecodeIEEE802154(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
         return TM_ECODE_FAILED;
     }
 
-    uint16_t expected_crc = IEEE802154_CRC16(pkt, 0, len-2);
-    uint16_t packet_crc = pkt[len-1] << 8 | pkt[len-2];
+    if (fcs) {
+        uint16_t expected_crc = IEEE802154_CRC16(pkt, 0, len-2);
+        uint16_t packet_crc = pkt[len-1] << 8 | pkt[len-2];
 
-    if (expected_crc != packet_crc) {
-        ENGINE_SET_EVENT(p, IEEE802154_BAD_CRC16);
-        return TM_ECODE_FAILED;
+        if (expected_crc != packet_crc) {
+            ENGINE_SET_EVENT(p, IEEE802154_BAD_CRC16);
+            return TM_ECODE_FAILED;
+        }
     }
 
     /* Now we can access the header */
@@ -372,6 +374,38 @@ int DecodeIEEE802154(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
 #endif
 
     return TM_ECODE_OK;
+}
+
+/**
+ * \brief Function to decode 802.15.4 packets
+ * \param tv thread vars
+ * \param dtv decoder thread vars
+ * \param p packet
+ * \param pkt raw packet data
+ * \param len length in bytes of pkt array
+ * \retval TM_ECODE_OK or TM_ECODE_FAILED on serious error
+ */
+
+int DecodeIEEE802154(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
+                     uint8_t *pkt, uint16_t len, PacketQueue *pq)
+{
+    return _DecodeIEEE802154(tv, dtv, p, pkt, len, pq, TRUE);
+}
+
+/**
+ * \brief Function to decode 802.15.4 packets without trailing FCS
+ * \param tv thread vars
+ * \param dtv decoder thread vars
+ * \param p packet
+ * \param pkt raw packet data
+ * \param len length in bytes of pkt array
+ * \retval TM_ECODE_OK or TM_ECODE_FAILED on serious error
+ */
+
+int DecodeIEEE802154NoFCS(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
+                          uint8_t *pkt, uint16_t len, PacketQueue *pq)
+{
+    return _DecodeIEEE802154(tv, dtv, p, pkt, len, pq, FALSE);
 }
 
 /**

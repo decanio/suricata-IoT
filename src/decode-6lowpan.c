@@ -100,8 +100,14 @@ static int Decode6LoWPANIPHC(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
     uint16_t ofs = 2;
     uint16_t payload_len;
     uint32_t from_wire = (rp == NULL);
+    
+#ifdef PRINT
+    printf("compressed 6LoWPAN-----(pcap_cnt: %lu)\n", p->pcap_cnt);
+    PrintRawDataFp(stdout, pkt, len);
+    printf("-------------------------\n");
+#endif    
     if (from_wire)
-        payload_len = len - ofs - 2 /* fcs */;    
+        payload_len = len - ofs /*- 2 fcs */;    
     else
         payload_len = dgram_len - sizeof(IPV6Hdr);
 
@@ -175,6 +181,9 @@ static int Decode6LoWPANIPHC(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
             if (from_wire)
                 payload_len -= 1;
             ofs += 1;
+            break;
+        case 1:
+            IPV6_SET_RAW_HLIM(&ipv6hdr, 1);
             break;
         case 2:
             IPV6_SET_RAW_HLIM(&ipv6hdr, 64);
