@@ -82,6 +82,8 @@ static int Decode6LoWPANHC1(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
     return TM_ECODE_OK;
 }
 
+#define IPV6_SET_RAW_CLASS(ip6h, value)   {uint32_t t = (ip6h)->s_ip6_flow; t |= (htonl(0x0FF00000 & (value << 20))); (ip6h)->s_ip6_flow = t;}
+#define IPV6_SET_RAW_FLOW(ip6h, value)   {uint32_t t = (ip6h)->s_ip6_flow; t |= (htonl(0x000FFFFF) & value); (ip6h)->s_ip6_flow = t;}
 #define IPV6_SET_RAW_HLIM(ip6h, value)   ((ip6h)->s_ip6_hlim = value)
 #define IPV6_SET_RAW_PLEN(ip6h, value)   ((ip6h)->s_ip6_plen = value)
 
@@ -102,9 +104,11 @@ static int Decode6LoWPANIPHC(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
     uint32_t from_wire = (rp == NULL);
     
 #ifdef PRINT
+#if 0
     printf("compressed 6LoWPAN-----(pcap_cnt: %lu)\n", p->pcap_cnt);
     PrintRawDataFp(stdout, pkt, len);
     printf("-------------------------\n");
+#endif
 #endif    
     if (from_wire)
         payload_len = len - ofs /*- 2 fcs */;    
@@ -153,11 +157,36 @@ static int Decode6LoWPANIPHC(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
     memset(&ipv6hdr, 0, sizeof(ipv6hdr));
 
     /*
-    if (p->pcap_cnt == 434)
+    if (p->pcap_cnt == 15525)
         breakpoint_6lowpan();
     */
         
     IPV6_SET_RAW_VER(&ipv6hdr, 6);
+    
+    if (iphc.tc_flow == 0x00) {
+        uint32_t tmp;
+        
+        tmp = pkt[ofs + 1] << 16 |
+              pkt[ofs + 2] << 8 |
+              pkt[ofs + 3];
+        IPV6_SET_RAW_FLOW(&ipv6hdr, htonl(tmp));
+        IPV6_SET_RAW_CLASS(&ipv6hdr, pkt[ofs] << 2);
+        if (from_wire)
+            payload_len -= 4;
+        len -= 4;
+        ofs += 4;
+    } else if (iphc.tc_flow == 0x01) {
+        uint32_t tmp;
+        
+        tmp = pkt[ofs] << 16 |
+              pkt[ofs + 1] << 8 |
+              pkt[ofs + 2];
+        IPV6_SET_RAW_FLOW(&ipv6hdr, htonl(tmp));
+        if (from_wire)
+            payload_len -= 3;
+        len -= 3;
+        ofs += 3;
+    }
     
     if (iphc.ctx_id_ext) {
         if (from_wire)
@@ -233,6 +262,21 @@ static int Decode6LoWPANIPHC(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
                     ipv6hdr.s_ip6_dst[3] = htonl(tmp);
                 }  
             }
+        } else if (iphc.dst_mode == 1) {
+                /* inline */
+                uint32_t tmp;
+                ipv6hdr.s_ip6_dst[0] = ntohl(0xff020000);
+                ipv6hdr.s_ip6_dst[1] = 0;
+                tmp = pkt[ofs + 1];
+                ipv6hdr.s_ip6_dst[2] = htonl(tmp);
+                tmp = pkt[ofs + 2] << 24 |
+                      pkt[ofs + 3] << 16 |
+                      pkt[ofs + 4] << 8 |
+                      pkt[ofs + 5];
+                ipv6hdr.s_ip6_dst[3] = htonl(tmp);
+                if (from_wire)
+                    payload_len -= 6;
+                ofs += 6;            
         }
     } else {
         if (iphc.dst_mode == 1) {
