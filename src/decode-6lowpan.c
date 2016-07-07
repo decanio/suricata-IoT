@@ -73,6 +73,11 @@ typedef struct FragNHeader_ {
 static int Decode6LoWPANIPv6(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
                              uint8_t *pkt, uint16_t len, PacketQueue *pq)
 {
+#ifdef PRINT
+    printf("raw 6LoWPAN-----(pcap_cnt: %lu)\n", p->pcap_cnt);
+    PrintRawDataFp(stdout, GET_PKT_DATA(p), GET_PKT_LEN(p));
+    printf("-------------------------\n");
+#endif
     return DecodeIPV6(tv, dtv, p, pkt, len, pq);
 }
 
@@ -87,7 +92,7 @@ static int Decode6LoWPANHC1(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
 #define IPV6_SET_RAW_HLIM(ip6h, value)   ((ip6h)->s_ip6_hlim = value)
 #define IPV6_SET_RAW_PLEN(ip6h, value)   ((ip6h)->s_ip6_plen = value)
 
-#if 0
+#if 1
 static void breakpoint_6lowpan(void)
 {
     printf("breakpoint\n");
@@ -659,7 +664,11 @@ static int Decode6LoWPANIPHC(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
 static Packet *fragment_list = NULL;
 static Packet *LookupFragment(Packet *p, uint16_t dgram_size, uint16_t dgram_tag)
 {
+#ifdef PRINT
+    printf("LookupFragment tag: %x\n", dgram_tag);
+#endif
     /* temporary hack */
+    for (;;) {
     Packet *rp = fragment_list;
     if (rp == NULL) {
         /* Allocate a Packet for the reassembled packet.  On failure we
@@ -670,16 +679,40 @@ static Packet *LookupFragment(Packet *p, uint16_t dgram_size, uint16_t dgram_tag
                        "6LoWPAN reassembly.");
             return NULL;
         }
+        memset(rp->sixlowpan_frag_map, 0, sizeof(rp->sixlowpan_frag_map));
         PKT_SET_SRC(rp, PKT_SRC_6LOWPAN);
         rp->recursion_level = p->recursion_level;
+        rp->sixlowpan_frag_tag = dgram_tag;
+        rp->flags |= PKT_IGNORE_CHECKSUM; /* HACK dont know why this is */
+        fragment_list = rp;
+#ifdef PRINT
+        printf("returning new frag Packet %p\n", rp);
+#endif
+        return rp;
+    } else {
+        if (rp->sixlowpan_frag_tag == dgram_tag) {
+            /* tags match */
+#ifdef PRINT
+            printf("returning existing Packet %p tag: %x\n", rp, dgram_tag);
+#endif
+            return rp;
+        } else {
+            /* need to free the old Packet */
+#ifdef PRINT
+            printf("fragment tag changed list_tag %x tag: %x\n", rp->sixlowpan_frag_tag, dgram_tag);
+#endif
+            fragment_list = NULL;
+       }
     }
-    fragment_list = rp;
-    
-    return rp;
+    }
 }
 
 static void RemoveFragment(Packet *p)
 {
+#ifdef PRINT
+    printf("removing fragment %p\n", p);
+    printf("fragment_list %p\n", fragment_list);
+#endif
     if (fragment_list == p) {
         fragment_list = NULL;
     }
@@ -687,10 +720,12 @@ static void RemoveFragment(Packet *p)
 
 static inline void Set6LoWPANMapBit(Packet *p, uint32_t offset)
 {
-    uint32_t bitoffset = offset / 8;
-    uint32_t word = bitoffset / 32;
-    //printf("setting offset %u word %u bit %u mask %x\n", offset, word, bitoffset % 32, 1<<(bitoffset % 32));
-    p->sixlowpan_frag_map[word] |= (1<<(bitoffset % 32));   
+    if (offset < 1280) {
+        uint32_t bitoffset = offset / 8;
+        uint32_t word = bitoffset / 32;
+        //printf("setting offset %u word %u bit %u mask %x\n", offset, word, bitoffset % 32, 1<<(bitoffset % 32));
+        p->sixlowpan_frag_map[word] |= (1<<(bitoffset % 32));   
+    }
 }
 
 static inline int IsSet6LoWPANMapBit(Packet *p, uint32_t offset)
@@ -708,16 +743,36 @@ static int Enqueue6LoWPANReassembledPacket(ThreadVars *tv, DecodeThreadVars *dtv
     uint32_t offset;
    
     /* check for fully reassembled packet */
+#ifdef PRINT
+    printf("checking through %d\n", dgram_size);
+    printf("map %08x %08x %08x %08x %08x\n",
+            p->sixlowpan_frag_map[0],
+            p->sixlowpan_frag_map[1],
+            p->sixlowpan_frag_map[2],
+            p->sixlowpan_frag_map[3],
+            p->sixlowpan_frag_map[4]);
+#endif
     for (offset = 0; offset < dgram_size; offset += 8) {
         if (IsSet6LoWPANMapBit(p, offset) == 0) {
             /* not fully reassembled yet */
+#ifdef PRINT
+            printf("incomplete\n");
+#endif
             return TM_ECODE_OK;
         }
     }
+#ifdef PRINT
+    printf("complete\n");
+#endif
 
     RemoveFragment(p);
     
     if (pq) {
+#ifdef PRINT
+        printf("reassembled 6LoWPAN-----(pcap_cnt: %lu)\n", p->pcap_cnt);
+        PrintRawDataFp(stdout, GET_PKT_DATA(p), GET_PKT_LEN(p));
+        printf("-------------------------\n");
+#endif
         StatsIncr(tv, dtv->counter_6lowpan_reassembled);
         /* send to IPv6 decoder is this came direct from the "ether"
          * if this came from the fragment reassembler hold off sending to
@@ -748,10 +803,15 @@ static int Decode6LoWPANFrag1(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
     f1h3 = pkt[3];
 
     f1h.type= f1h0 >> 3;
-    f1h.dgram_size = ((f1h0 & 0x3) << 8) | f1h1;
+    f1h.dgram_size = ((f1h0 & 0x7) << 8) | f1h1;
     f1h.dgram_tag = (f1h2 << 8) | f1h3;
-       
-    SCLogNotice("6LoWPAN fragment 1");
+
+#ifdef PRINT       
+    printf("6LoWPAN fragment 1 tag: %x size: %d len: %d\n", f1h.dgram_tag, f1h.dgram_size, len); 
+    PrintRawDataFp(stdout, pkt, len);
+    if (f1h.dgram_tag == 0x31d)
+        breakpoint_6lowpan();
+#endif
     
     rp = LookupFragment(p, f1h.dgram_size, f1h.dgram_tag);
     
@@ -761,21 +821,38 @@ static int Decode6LoWPANFrag1(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
  
     const SixLoWPANHdr *hdr = (const SixLoWPANHdr *)&pkt[4];
     if ((hdr->dispatch & 0xe0) ==  SIXLOWPAN_DISPATCH_IPHC) {
+#ifdef PRINT       
+        printf("6LoWPAN fragment is IPHC\n");
+#endif
         Decode6LoWPANIPHC(tv, dtv, p, (uint8_t *)hdr, len, f1h.dgram_size, pq, rp);
         uint32_t pkt_len = GET_PKT_LEN(rp);
+#ifdef PRINT
+        printf("setting bits %d through %d\n", 0, pkt_len);
+        printf("map %08x %08x %08x %08x %08x before\n",
+                rp->sixlowpan_frag_map[0],
+                rp->sixlowpan_frag_map[1],
+                rp->sixlowpan_frag_map[2],
+                rp->sixlowpan_frag_map[3],
+                rp->sixlowpan_frag_map[4]);
+#endif
         for (offset = 0; offset < pkt_len; offset++) {
             Set6LoWPANMapBit(rp, offset);
         }      
+#ifdef PRINT
+        printf("map %08x %08x %08x %08x %08x after\n",
+                rp->sixlowpan_frag_map[0],
+                rp->sixlowpan_frag_map[1],
+                rp->sixlowpan_frag_map[2],
+                rp->sixlowpan_frag_map[3],
+                rp->sixlowpan_frag_map[4]);
+#endif
     } else if (hdr->dispatch == SIXLOWPAN_DISPATCH_IPV6) {
+#ifdef PRINT       
+        printf("6LoWPAN fragment is IPV6\n");
+#endif
     }
     SET_PKT_LEN(rp, f1h.dgram_size);
     
- #ifdef PRINT
-    printf("reassembled 6LoWPAN-----(pcap_cnt: %lu)\n", p->pcap_cnt);
-    PrintRawDataFp(stdout, GET_PKT_DATA(rp), GET_PKT_LEN(rp));
-    printf("-------------------------\n");
-#endif
-
     Enqueue6LoWPANReassembledPacket(tv, dtv, rp, f1h.dgram_size, pq);
     
     return TM_ECODE_OK;
@@ -788,6 +865,7 @@ static int Decode6LoWPANFragN(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
     FragNHeader fnh;
     Packet *rp = NULL;
     uint32_t offset;
+    uint16_t i;
     
     StatsIncr(tv, dtv->counter_6lowpan_fragment);
     
@@ -798,29 +876,45 @@ static int Decode6LoWPANFragN(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
     fnh4 = pkt[4];
 
     fnh.type= fnh0 >> 3;
-    fnh.dgram_size = ((fnh0 & 0x3) << 8) | fnh1;
+    fnh.dgram_size = ((fnh0 & 0x7) << 8) | fnh1;
     fnh.dgram_tag = (fnh2 << 8) | fnh3;
     fnh.dgram_offset = fnh4;
-    
-    SCLogNotice("6LoWPAN fragment N");
+
+#ifdef PRINT    
+    printf("6LoWPAN fragment N tag: %x size: %d offset %d\n", fnh.dgram_tag, fnh.dgram_size, fnh.dgram_offset * 8);
+    PrintRawDataFp(stdout, &pkt[5], len - 5);
+    printf("-------------------------\n");
+#endif
     
     rp = LookupFragment(p, fnh.dgram_size, fnh.dgram_tag);
     
     if (rp == NULL) {
         return TM_ECODE_OK;
     }
-    
-    for (offset = fnh.dgram_offset * 8; offset < fnh.dgram_size; offset++) {
+   
+#ifdef PRINT
+    printf("setting from %d to %d\n", fnh.dgram_offset * 8, (fnh.dgram_offset * 8) + len - 5);
+    printf("map %08x %08x %08x %08x %08x before\n",
+            rp->sixlowpan_frag_map[0],
+            rp->sixlowpan_frag_map[1],
+            rp->sixlowpan_frag_map[2],
+            rp->sixlowpan_frag_map[3],
+            rp->sixlowpan_frag_map[4]);
+#endif 
+    //for (offset = fnh.dgram_offset * 8; offset < fnh.dgram_size; offset++) {
+    for (offset = fnh.dgram_offset * 8, i = 0; i < len - 5; offset++, i++) {
         Set6LoWPANMapBit(rp, offset);
     }
+#ifdef PRINT
+    printf("map %08x %08x %08x %08x %08x after\n",
+            rp->sixlowpan_frag_map[0],
+            rp->sixlowpan_frag_map[1],
+            rp->sixlowpan_frag_map[2],
+            rp->sixlowpan_frag_map[3],
+            rp->sixlowpan_frag_map[4]);
+#endif
     PacketCopyDataOffset(rp, fnh.dgram_offset * 8, &pkt[5], len - 5);
     
-#ifdef PRINT
-    printf("reassembled 6LoWPAN-----(pcap_cnt: %lu)\n", p->pcap_cnt);
-    PrintRawDataFp(stdout, GET_PKT_DATA(rp), GET_PKT_LEN(rp));
-    printf("-------------------------\n");
-#endif
-
     Enqueue6LoWPANReassembledPacket(tv, dtv, rp, fnh.dgram_size, pq);
 
     return TM_ECODE_OK;
