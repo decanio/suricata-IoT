@@ -509,6 +509,7 @@ typedef struct Packet_
     ZigBeeVars zigbeevars;
     /* 6LoWPAN fragment reassembly map. 1 bit per 8 bytes */
     uint32_t sixlowpan_frag_map[5];
+    uint16_t sixlowpan_frag_tag;
 
     /* ptr to the payload of the packet
      * with it's length. */
