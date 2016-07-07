@@ -252,6 +252,7 @@ static int _DecodeIEEE802154(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
             ENGINE_SET_EVENT(p, IEEE802154_BAD_CRC16);
             return TM_ECODE_FAILED;
         }
+        len -= 2;
     }
 
     /* Now we can access the header */
