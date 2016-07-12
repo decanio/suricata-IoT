@@ -166,14 +166,19 @@
     AC_HEADER_STDBOOL
 
     # Checks for library functions.
-    AC_FUNC_MALLOC
-    AC_FUNC_REALLOC
+    #AC_FUNC_MALLOC
+    #AC_FUNC_REALLOC
     AC_CHECK_FUNCS([gettimeofday memset strcasecmp strchr strdup strerror strncasecmp strtol strtoul memchr memrchr])
 
     OCFLAGS=$CFLAGS
     CFLAGS=""
     AC_CHECK_FUNCS([strlcpy strlcat])
     CFLAGS=$OCFLAGS
+
+    # rpl_malloc problem AC_FUNC_MALLOC
+
+    # if you must check for malloc...
+    AC_CHECK_FUNCS([malloc]) 
 
     # Add large file support
     AC_SYS_LARGEFILE
