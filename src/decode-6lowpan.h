@@ -86,4 +86,7 @@ typedef struct SixLoWPANHdr_ {
     uint8_t dispatch;
 } __attribute__((__packed__)) SixLoWPANHdr;
 
+void Decode6LoWPANInit(void);
+void Decode6LoWPANDestroy(void);
+
 #endif /* __DECODE_6LOWPAN_H__ */
