@@ -80,12 +80,13 @@ int MagicInit(void)
         }
     }
 
+#if 0
     if (magic_load(g_magic_ctx, filename) != 0) {
         SCLogError(SC_ERR_MAGIC_LOAD, "magic_load failed: %s",
                 magic_error(g_magic_ctx));
         goto error;
     }
-
+#endif
     SCMutexUnlock(&g_magic_lock);
     SCReturnInt(0);
 
