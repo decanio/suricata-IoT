@@ -1,4 +1,4 @@
-/* Copyright (C) 2015 Open Information Security Foundation
+/* Copyright (C) 2016 Open Information Security Foundation
  *
  * You can copy, redistribute or modify this Program under the terms of
  * the GNU General Public License version 2 as published by the Free
@@ -36,6 +36,8 @@
 #include "decode-events.h"
 #include "decode-template.h"
 
+#include "util-hash.h"
+#include "util-hash-lookup3.h"
 #include "util-unittest.h"
 #include "util-debug.h"
 #include "util-print.h"
@@ -69,6 +71,11 @@ typedef struct FragNHeader_ {
     uint32_t dgram_tag : 16;
     uint32_t dgram_offset : 8;
 } FragNHeader;
+
+SC_ATOMIC_DECLARE(unsigned int, sixlowpan_defragtracker_counter);
+SC_ATOMIC_DECLARE(unsigned long long, sixlowpan_memuse);
+static unsigned int sixlowpan_defragtracket_max = 1024; /* TBD: make configurable */
+//static unsigned long long sixlowpan_memcap = 32*1024;   /* TBD: make configurable */
 
 static int Decode6LoWPANIPv6(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
                              uint8_t *pkt, uint16_t len, PacketQueue *pq)
@@ -443,61 +450,124 @@ static int Decode6LoWPANIPHC(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
     return TM_ECODE_OK;
 }
 
-static Packet *fragment_list = NULL;
-static Packet *LookupFragment(Packet *p, uint16_t dgram_size, uint16_t dgram_tag)
+typedef struct FragLookupKey_ {
+    union {
+        struct {
+            uint16_t dgram_size;
+            uint16_t dgram_tag;
+        };
+        uint32_t x[1];
+    };
+} FragLookupKey;
+
+typedef struct FragLookupEntry_ {
+    FragLookupKey key;
+    Packet *p;
+} FragLookupEntry;
+
+static HashTable *fragment_table = NULL;
+
+static uint32_t SixLoWPANFragHash(HashTable *h, void *data, uint16_t data_len)
 {
+     uint32_t hash = hashword(data, data_len/sizeof(uint32_t), 0x5678) % h->array_size;
 #ifdef PRINT
-    printf("LookupFragment tag: %x\n", dgram_tag);
+     FragLookupKey *entry = data;
+     printf("Fragment Hash dgram_size: %d dgram_tag: %x ", entry->dgram_size, entry->dgram_tag);
+     printf("hash: %d\n", hash);
 #endif
-    /* temporary hack */
-    for (;;) {
-    Packet *rp = fragment_list;
-    if (rp == NULL) {
-        /* Allocate a Packet for the reassembled packet.  On failure we
-         * SCFree all the resources held by this tracker. */
-        rp = Packet6LoWPANPktSetup(p, NULL, 0);
-        if (rp == NULL) {
-            SCLogError(SC_ERR_MEM_ALLOC, "Failed to allocate packet for "
-                       "6LoWPAN reassembly.");
-            return NULL;
-        }
-        memset(rp->sixlowpan_frag_map, 0, sizeof(rp->sixlowpan_frag_map));
-        PKT_SET_SRC(rp, PKT_SRC_6LOWPAN);
-        rp->recursion_level = p->recursion_level;
-        rp->sixlowpan_frag_tag = dgram_tag;
-        rp->flags |= PKT_IGNORE_CHECKSUM; /* HACK dont know why this is */
-        fragment_list = rp;
-#ifdef PRINT
-        printf("returning new frag Packet %p\n", rp);
-#endif
-        return rp;
-    } else {
-        if (rp->sixlowpan_frag_tag == dgram_tag) {
-            /* tags match */
-#ifdef PRINT
-            printf("returning existing Packet %p tag: %x\n", rp, dgram_tag);
-#endif
-            return rp;
-        } else {
-            /* need to free the old Packet */
-#ifdef PRINT
-            printf("fragment tag changed list_tag %x tag: %x\n", rp->sixlowpan_frag_tag, dgram_tag);
-#endif
-            fragment_list = NULL;
-       }
-    }
-    }
+     return hash;
+    //DetectEngineThreadCtx *det_ctx = (DetectEngineThreadCtx *)data;
+    //return det_ctx->tenant_id % h->array_size;
 }
 
-static void RemoveFragment(Packet *p)
+static int ReclaimFragments(Packet *p)
 {
-#ifdef PRINT
-    printf("removing fragment %p\n", p);
-    printf("fragment_list %p\n", fragment_list);
-#endif
-    if (fragment_list == p) {
-        fragment_list = NULL;
+    HashTable *ht = fragment_table;
+    FragLookupEntry *entry;
+    uint32_t i = 0;
+    int rc = 0;
+
+    if (ht == NULL)
+        return 0;
+
+    /* free the buckets */
+repeat:
+    for (i = 0; i < ht->array_size; i++) {
+        HashTableBucket *hashbucket = ht->array[i];
+        while (hashbucket != NULL) {
+            HashTableBucket *next_hashbucket = hashbucket->next;
+            entry = hashbucket->data;
+            if (unlikely(difftime(p->ts.tv_sec, entry->p->ts.tv_sec) > 60)) {
+                rc = 1;
+                goto repeat;
+            }
+            //if (ht->Free != NULL)
+            //    ht->Free(hashbucket->data);
+            //SCFree(hashbucket);
+            hashbucket = next_hashbucket;
+        }
     }
+
+    return rc;
+}
+
+static Packet *LookupFragment(Packet *p, uint16_t dgram_size, uint16_t dgram_tag)
+{
+    FragLookupEntry *entry;
+    FragLookupKey key;
+    key.dgram_size = dgram_size;
+    key.dgram_tag = dgram_tag;
+    
+    /* TBD: need to lock around this */
+    entry = HashTableLookup(fragment_table, &key, (uint16_t)sizeof(key));
+#ifdef PRINT
+    printf("LookupFragment pcap_cnt: %ld, entry: %p\n", p->pcap_cnt, entry);
+#endif
+    if (entry == NULL) {
+        if (SC_ATOMIC_GET(sixlowpan_defragtracker_counter) >= sixlowpan_defragtracket_max) {
+            if (ReclaimFragments(p) == 0) {
+                return NULL;
+            }
+        }
+        entry = SCMalloc(sizeof(entry));
+        if (unlikely(entry != NULL)) {
+            /* Allocate a Packet for the reassembled packet.  On failure we
+             * SCFree all the resources held by this tracker. */
+            entry->key = key;
+            entry->p = Packet6LoWPANPktSetup(p, NULL, 0);
+            if (entry->p == NULL) {
+                SCLogError(SC_ERR_MEM_ALLOC, "Failed to allocate packet for "
+                           "6LoWPAN reassembly.");
+                SCFree(entry);
+                return NULL;
+            }
+            memset(entry->p->sixlowpan_frag_map, 0, sizeof(entry->p->sixlowpan_frag_map));
+            PKT_SET_SRC(entry->p, PKT_SRC_6LOWPAN);
+            entry->p->recursion_level = p->recursion_level;
+            entry->p->sixlowpan_frag_tag = dgram_tag;
+            entry->p->flags |= PKT_IGNORE_CHECKSUM; /* HACK don't know why this is */
+            if (likely(HashTableAdd(fragment_table, entry, (uint16_t) sizeof(entry->key)) == 0)) {
+                SC_ATOMIC_ADD(sixlowpan_defragtracker_counter, 1);
+                return entry->p;
+            }
+            /* TBD: Need to free the packet we allocated above */
+            SCFree(entry);
+        }
+        return NULL;
+    }
+    return entry->p;
+}
+
+static void RemoveFragment(Packet *p, uint16_t dgram_size, uint16_t dgram_tag)
+{
+    FragLookupKey key;
+    key.dgram_size = dgram_size;
+    key.dgram_tag = dgram_tag;
+#ifdef PRINT
+    printf("RemoveFragment\n");
+#endif       
+    HashTableRemove(fragment_table, &key, (uint16_t) sizeof(key));
+    SC_ATOMIC_SUB(sixlowpan_defragtracker_counter, 1);
 }
 
 static inline void Set6LoWPANMapBit(Packet *p, uint32_t offset)
@@ -520,7 +590,7 @@ static inline int IsSet6LoWPANMapBit(Packet *p, uint32_t offset)
 }
 
 static int Enqueue6LoWPANReassembledPacket(ThreadVars *tv, DecodeThreadVars *dtv, 
-                                           Packet *p, uint32_t dgram_size, PacketQueue *pq)
+                                           Packet *p, uint16_t dgram_size, uint16_t dgram_tag, PacketQueue *pq)
 {
     uint32_t offset;
    
@@ -547,7 +617,7 @@ static int Enqueue6LoWPANReassembledPacket(ThreadVars *tv, DecodeThreadVars *dtv
     printf("complete\n");
 #endif
 
-    RemoveFragment(p);
+    RemoveFragment(p, dgram_size, dgram_tag);
     
     if (pq) {
 #ifdef PRINT
@@ -635,7 +705,7 @@ static int Decode6LoWPANFrag1(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
     }
     SET_PKT_LEN(rp, f1h.dgram_size);
     
-    Enqueue6LoWPANReassembledPacket(tv, dtv, rp, f1h.dgram_size, pq);
+    Enqueue6LoWPANReassembledPacket(tv, dtv, rp, f1h.dgram_size, f1h.dgram_tag, pq);
     
     return TM_ECODE_OK;
 }
@@ -697,7 +767,7 @@ static int Decode6LoWPANFragN(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
 #endif
     PacketCopyDataOffset(rp, fnh.dgram_offset * 8, &pkt[5], len - 5);
     
-    Enqueue6LoWPANReassembledPacket(tv, dtv, rp, fnh.dgram_size, pq);
+    Enqueue6LoWPANReassembledPacket(tv, dtv, rp, fnh.dgram_size, fnh.dgram_tag, pq);
 
     return TM_ECODE_OK;
 }
@@ -758,6 +828,20 @@ int Decode6LoWPAN(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
     return rc;
 }
 
+void Decode6LoWPANInit(void)
+{
+    fragment_table = HashTableInit(4096, SixLoWPANFragHash, NULL, NULL);
+    SC_ATOMIC_INIT(sixlowpan_defragtracker_counter);
+    SC_ATOMIC_INIT(sixlowpan_memuse);
+}
+
+void Decode6LoWPANDestroy(void)
+{
+    if (fragment_table != NULL)
+        HashTableFree(fragment_table);
+    SC_ATOMIC_DESTROY(sixlowpan_defragtracker_counter);
+    SC_ATOMIC_DESTROY(sixlowpan_memuse);
+}
 /**
  * @}
  */
