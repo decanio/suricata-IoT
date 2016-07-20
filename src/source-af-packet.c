@@ -253,6 +253,9 @@ typedef struct AFPThreadVars_
 
     int threads;
 
+    /* itron riva */
+    int itronriva;
+
     union {
         struct tpacket_req req;
 #ifdef HAVE_TPACKET_V3
@@ -613,7 +616,13 @@ int AFPRead(AFPThreadVars *ptv)
         hdrp->sll_protocol = from.sll_protocol;
     }
 
-    p->datalink = ptv->datalink;
+    /* Itron Riva passes unencapsulated IPv6 up stack with an 
+     * 802.15.4 no FCS datalink.  Switch encap for decoder here.
+     */
+    if (likely(ptv->itronriva == 0))
+        p->datalink = ptv->datalink;
+    else
+        p->datalink = LINKTYPE_RAW_IPV6;
     SET_PKT_LEN(p, caplen + offset);
     if (PacketCopyData(p, ptv->data, GET_PKT_LEN(p)) == -1) {
         TmqhOutputPacketpool(ptv->tv, p);
@@ -820,7 +829,13 @@ int AFPReadFromRing(AFPThreadVars *ptv)
 
         ptv->pkts++;
         p->livedev = ptv->livedev;
-        p->datalink = ptv->datalink;
+        /* Itron Riva passes unencapsulated IPv6 up stack with an 
+         * 802.15.4 no FCS datalink.  Switch encap for decoder here.
+         */
+        if (likely(ptv->itronriva == 0))
+            p->datalink = ptv->datalink;
+        else
+            p->datalink = LINKTYPE_RAW_IPV6;
 
         if (h.h2->tp_len > h.h2->tp_snaplen) {
             SCLogDebug("Packet length (%d) > snaplen (%d), truncating",
@@ -927,7 +942,13 @@ static inline int AFPParsePacketV3(AFPThreadVars *ptv, struct tpacket_block_desc
 
     ptv->pkts++;
     p->livedev = ptv->livedev;
-    p->datalink = ptv->datalink;
+    /* Itron Riva passes unencapsulated IPv6 up stack with an 
+     * 802.15.4 no FCS datalink.  Switch encap for decoder here.
+     */
+    if (likely(ptv->itronriva == 0))
+        p->datalink = ptv->datalink;
+    else
+        p->datalink = LINKTYPE_RAW_IPV6;
 
     if (ptv->flags & AFP_ZERO_COPY) {
         if (PacketSetData(p, (unsigned char*)ppd + ppd->tp_mac, ppd->tp_snaplen) == -1) {
@@ -2120,6 +2141,7 @@ TmEcode ReceiveAFPThreadInit(ThreadVars *tv, void *initdata, void **data)
         }
     }
 
+    ptv->itronriva = afpconfig->itronriva;
 
     if (AFPPeersListAdd(ptv) == TM_ECODE_FAILED) {
         SCFree(ptv);
@@ -2245,6 +2267,15 @@ TmEcode DecodeAFP(ThreadVars *tv, Packet *p, void *data, PacketQueue *pq, Packet
             break;
         case LINKTYPE_NULL:
             DecodeNull(tv, dtv, p, GET_PKT_DATA(p), GET_PKT_LEN(p), pq);
+            break;
+        case LINKTYPE_IEEE802_15_4:
+            DecodeIEEE802154(tv, dtv, p,GET_PKT_DATA(p), GET_PKT_LEN(p), pq);
+            break;
+        case LINKTYPE_IEEE802_15_4_NOFCS:
+            DecodeIEEE802154NoFCS(tv, dtv, p,GET_PKT_DATA(p), GET_PKT_LEN(p), pq);
+            break;
+        case LINKTYPE_RAW_IPV6:
+            DecodeIPV6(tv, dtv, p,GET_PKT_DATA(p), GET_PKT_LEN(p), pq);
             break;
         default:
             SCLogError(SC_ERR_DATALINK_UNIMPLEMENTED, "Error: datalink type %" PRId32 " not yet supported in module DecodeAFP", p->datalink);

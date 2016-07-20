@@ -83,6 +83,8 @@ typedef struct AFPIfaceConfig_
     int cluster_type;
     /* promisc mode */
     int promisc;
+    /* itron riva */
+    int itronriva;
     /* misc use flags including ring mode */
     int flags;
     int copy_mode;

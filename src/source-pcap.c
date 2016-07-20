@@ -97,6 +97,9 @@ typedef struct PcapThreadVars_
     int pcap_buffer_size;
     int pcap_snaplen;
 
+    /* itron riva */
+    int itronriva;
+
     ChecksumValidationMode checksum_mode;
 
 #if LIBPCAP_VERSION_MAJOR == 0
@@ -244,7 +247,13 @@ void PcapCallbackLoop(char *user, struct pcap_pkthdr *h, u_char *pkt)
     p->ts.tv_sec = h->ts.tv_sec;
     p->ts.tv_usec = h->ts.tv_usec;
     SCLogDebug("p->ts.tv_sec %"PRIuMAX"", (uintmax_t)p->ts.tv_sec);
-    p->datalink = ptv->datalink;
+    /* Itron Riva passes unencapsulated IPv6 up stack with an 
+     * 802.15.4 no FCS datalink.  Switch encap for decoder here.
+     */
+    if (likely(ptv->itronriva == 0))
+        p->datalink = ptv->datalink;
+    else
+        p->datalink = LINKTYPE_RAW_IPV6;
 
     ptv->pkts++;
     ptv->bytes += h->caplen;
@@ -517,6 +526,8 @@ TmEcode ReceivePcapThreadInit(ThreadVars *tv, void *initdata, void **data)
 
     pcapconfig->DerefFunc(pcapconfig);
 
+    ptv->itronriva = pcapconfig->itronriva;
+
     ptv->capture_kernel_packets = StatsRegisterCounter("capture.kernel_packets",
             ptv->tv);
     ptv->capture_kernel_drops = StatsRegisterCounter("capture.kernel_drops",
@@ -719,6 +730,15 @@ TmEcode DecodePcap(ThreadVars *tv, Packet *p, void *data, PacketQueue *pq, Packe
             break;
         case LINKTYPE_NULL:
             DecodeNull(tv, dtv, p, GET_PKT_DATA(p), GET_PKT_LEN(p), pq);
+            break;
+        case LINKTYPE_IEEE802_15_4:
+            DecodeIEEE802154(tv, dtv, p,GET_PKT_DATA(p), GET_PKT_LEN(p), pq);
+            break;
+        case LINKTYPE_IEEE802_15_4_NOFCS:
+            DecodeIEEE802154NoFCS(tv, dtv, p,GET_PKT_DATA(p), GET_PKT_LEN(p), pq);
+            break;
+        case LINKTYPE_RAW_IPV6:
+            DecodeIPV6(tv, dtv, p,GET_PKT_DATA(p), GET_PKT_LEN(p), pq);
             break;
         default:
             SCLogError(SC_ERR_DATALINK_UNIMPLEMENTED, "Error: datalink type %" PRId32 " not yet supported in module DecodePcap", p->datalink);
