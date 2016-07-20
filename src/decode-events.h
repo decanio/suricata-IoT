@@ -152,6 +152,10 @@ enum {
     LTNULL_PKT_TOO_SMALL,           /**< pkt too small for lt:null */
     LTNULL_UNSUPPORTED_TYPE,        /**< pkt has a type that the decoder doesn't support */
 
+    /* IEEE802154 EVENTS */
+    IEEE802154_BAD_CRC16,            /**< computed CRC16 doesn't match packet */
+    IEEE802154_UNSUPPORTED_PROTOCOL, /**< decoded protocol not supported */
+
     /* SCTP EVENTS */
     SCTP_PKT_TOO_SMALL, /**< sctp packet smaller than minimum size */
 

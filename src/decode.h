@@ -54,6 +54,7 @@ enum PktSrcEnum {
     PKT_SRC_DEFRAG,
     PKT_SRC_STREAM_TCP_STREAM_END_PSEUDO,
     PKT_SRC_FFR,
+    PKT_SRC_6LOWPAN,
 };
 
 #include "source-nflog.h"
@@ -66,6 +67,7 @@ enum PktSrcEnum {
 
 #include "action-globals.h"
 
+#include "decode-6lowpan.h"
 #include "decode-erspan.h"
 #include "decode-ethernet.h"
 #include "decode-gre.h"
@@ -76,6 +78,7 @@ enum PktSrcEnum {
 #include "decode-ipv6.h"
 #include "decode-icmpv4.h"
 #include "decode-icmpv6.h"
+#include "decode-ieee-802154.h"
 #include "decode-tcp.h"
 #include "decode-udp.h"
 #include "decode-sctp.h"
@@ -83,6 +86,7 @@ enum PktSrcEnum {
 #include "decode-null.h"
 #include "decode-vlan.h"
 #include "decode-mpls.h"
+#include "decode-zigbee.h"
 
 #include "detect-reference.h"
 
@@ -113,6 +117,14 @@ typedef struct Address_ {
 #define addr_data32 address.address_un_data32
 #define addr_data16 address.address_un_data16
 #define addr_data8  address.address_un_data8
+
+#ifndef AF_ZIGBEE
+#define AF_ZIGBEE   (PF_MAX+1)
+#endif
+
+#ifndef AF_IEEE802154
+#define AF_IEEE802154 (PF+_MAX+2)
+#endif 
 
 #define COPY_ADDRESS(a, b) do {                    \
         (b)->family = (a)->family;                 \
@@ -246,6 +258,7 @@ typedef uint16_t Port;
 #define PKT_IS_ICMPV6(p)    (((p)->icmpv6h != NULL))
 #define PKT_IS_TOSERVER(p)  (((p)->flowflags & FLOW_PKT_TOSERVER))
 #define PKT_IS_TOCLIENT(p)  (((p)->flowflags & FLOW_PKT_TOCLIENT))
+#define PKT_IS_ZIGBEE(p)    (((p)->zigbeeh != NULL))
 
 #define IPH_IS_VALID(p) (PKT_IS_IPV4((p)) || PKT_IS_IPV6((p)))
 
@@ -489,6 +502,14 @@ typedef struct Packet_
     GREHdr *greh;
 
     VLANHdr *vlanh[2];
+    
+    ZigBeeHdr *zigbeeh;
+
+    IEEE802154Vars ieee802154vars;
+    ZigBeeVars zigbeevars;
+    /* 6LoWPAN fragment reassembly map. 1 bit per 8 bytes */
+    uint32_t sixlowpan_frag_map[5];
+    uint16_t sixlowpan_frag_tag;
 
     /* ptr to the payload of the packet
      * with it's length. */
@@ -614,6 +635,12 @@ typedef struct DecodeThreadVars_
     uint16_t counter_sll;
     uint16_t counter_raw;
     uint16_t counter_null;
+    uint16_t counter_ieee802154;
+    uint16_t counter_6lowpan;
+    uint16_t counter_6lowpan_uncompressed;
+    uint16_t counter_6lowpan_fragment;
+    uint16_t counter_6lowpan_reassembled;
+    uint16_t counter_zigbee;
     uint16_t counter_sctp;
     uint16_t counter_ppp;
     uint16_t counter_gre;
@@ -878,6 +905,7 @@ Packet *PacketTunnelPktSetup(ThreadVars *tv, DecodeThreadVars *dtv, Packet *pare
                              uint8_t *pkt, uint16_t len, enum DecodeTunnelProto proto, PacketQueue *pq);
 Packet *PacketDefragPktSetup(Packet *parent, uint8_t *pkt, uint16_t len, uint8_t proto);
 void PacketDefragPktSetupParent(Packet *parent);
+Packet *Packet6LoWPANPktSetup(Packet *parent, uint8_t *pkt, uint16_t len);
 void DecodeRegisterPerfCounters(DecodeThreadVars *, ThreadVars *);
 Packet *PacketGetFromQueueOrAlloc(void);
 Packet *PacketGetFromAlloc(void);
@@ -897,6 +925,8 @@ void DecodeUpdatePacketCounters(ThreadVars *tv,
 
 /* decoder functions */
 int DecodeEthernet(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
+int DecodeIEEE802154(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
+int DecodeIEEE802154NoFCS(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodeSll(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodePPP(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodePPPOESession(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
@@ -906,6 +936,8 @@ int DecodeNull(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, 
 int DecodeRaw(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodeIPV4(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodeIPV6(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
+int Decode6LoWPAN(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
+int DecodeZigBee(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodeICMPV4(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodeICMPV6(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
 int DecodeTCP(ThreadVars *, DecodeThreadVars *, Packet *, uint8_t *, uint16_t, PacketQueue *);
@@ -1005,6 +1037,9 @@ int DecoderParseDataFromFile(char *filename, DecoderFunc Decoder);
 #define IPPROTO_SHIM6 140
 #endif
 
+/* define a constant to ZigBee.  Not an IPPROTO_ */
+#define PROTO_ZIGBEE 255
+
 /* pcap provides this, but we don't want to depend on libpcap */
 #ifndef DLT_EN10MB
 #define DLT_EN10MB 1
@@ -1027,11 +1062,14 @@ int DecoderParseDataFromFile(char *filename, DecoderFunc Decoder);
  * \todo we need more & maybe put them in a separate file? */
 #define LINKTYPE_NULL       DLT_NULL
 #define LINKTYPE_ETHERNET   DLT_EN10MB
+#define LINKTYPE_IEEE802_15_4 DLT_IEEE802_15_4
+#define LINKTYPE_IEEE802_15_4_NOFCS DLT_IEEE802_15_4_NOFCS
 #define LINKTYPE_LINUX_SLL  113
 #define LINKTYPE_PPP        9
 #define LINKTYPE_RAW        DLT_RAW
 #define PPP_OVER_GRE        11
 #define VLAN_OVER_GRE       13
+#define LINKTYPE_RAW_IPV6   DLT_USER0   /* raw IPv6 packet from Itron Riva stack */
 
 /*Packet Flags*/
 #define PKT_NOPACKET_INSPECTION         (1)         /**< Flag to indicate that packet header or contents should not be inspected*/

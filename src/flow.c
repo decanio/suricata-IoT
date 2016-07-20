@@ -187,6 +187,12 @@ int FlowGetPacketDirection(const Flow *f, const Packet *p)
         } else {
             return TOCLIENT;
         }
+    } else if (p->proto == PROTO_ZIGBEE) {
+        if (f->src.addr_data32[0] == (uint32_t)p->zigbeevars.source_address) {
+            return TOSERVER;
+        } else {
+            return TOCLIENT;
+        }
     }
 
     /* default to toserver */
@@ -528,7 +534,18 @@ void FlowInitFlowProto(void)
     flow_proto[FLOW_PROTO_ICMP].emerg_closed_timeout =
         FLOW_DEFAULT_EMERG_CLOSED_TIMEOUT;
     flow_proto[FLOW_PROTO_ICMP].Freefunc = NULL;
-
+   /*ZigBee*/
+    flow_proto[FLOW_PROTO_ZIGBEE].new_timeout = FLOW_DEFAULT_NEW_TIMEOUT;
+    flow_proto[FLOW_PROTO_ZIGBEE].est_timeout = FLOW_DEFAULT_EST_TIMEOUT;
+    flow_proto[FLOW_PROTO_ZIGBEE].closed_timeout =
+        FLOW_DEFAULT_CLOSED_TIMEOUT;
+    flow_proto[FLOW_PROTO_ZIGBEE].emerg_new_timeout =
+        FLOW_DEFAULT_EMERG_NEW_TIMEOUT;
+    flow_proto[FLOW_PROTO_ZIGBEE].emerg_est_timeout =
+        FLOW_DEFAULT_EMERG_EST_TIMEOUT;
+    flow_proto[FLOW_PROTO_ZIGBEE].emerg_closed_timeout =
+        FLOW_DEFAULT_EMERG_CLOSED_TIMEOUT;
+    flow_proto[FLOW_PROTO_ZIGBEE].Freefunc = NULL;
     /* Let's see if we have custom timeouts defined from config */
     const char *new = NULL;
     const char *established = NULL;

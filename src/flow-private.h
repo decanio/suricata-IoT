@@ -62,7 +62,9 @@ enum {
     FLOW_PROTO_UDP,
     FLOW_PROTO_ICMP,
     FLOW_PROTO_SCTP,
+    //FLOW_PROTO_ZIGBEE,
     FLOW_PROTO_DEFAULT,
+    FLOW_PROTO_ZIGBEE,
 
     /* should be last */
     FLOW_PROTO_MAX,

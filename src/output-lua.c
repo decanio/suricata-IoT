@@ -61,6 +61,7 @@
 #include "util-lua-dns.h"
 #include "util-lua-tls.h"
 #include "util-lua-ssh.h"
+#include "util-lua-smtp.h"
 
 #define MODULE_NAME "LuaLog"
 
@@ -605,6 +606,8 @@ static int LuaScriptInit(const char *filename, LogLuaScriptOptions *options) {
             options->alproto = ALPROTO_TLS;
         else if (strcmp(k,"protocol") == 0 && strcmp(v, "ssh") == 0)
             options->alproto = ALPROTO_SSH;
+        else if (strcmp(k,"protocol") == 0 && strcmp(v, "smtp") == 0)
+            options->alproto = ALPROTO_SMTP;
         else if (strcmp(k, "type") == 0 && strcmp(v, "packet") == 0)
             options->packet = 1;
         else if (strcmp(k, "filter") == 0 && strcmp(v, "alerts") == 0)
@@ -708,6 +711,7 @@ static lua_State *LuaScriptSetup(const char *filename)
     LuaRegisterDnsFunctions(luastate);
     LuaRegisterTlsFunctions(luastate);
     LuaRegisterSshFunctions(luastate);
+    LuaRegisterSmtpFunctions(luastate);
 
     if (lua_pcall(luastate, 0, 0, 0) != 0) {
         SCLogError(SC_ERR_LUA_ERROR, "couldn't run script 'setup' function: %s", lua_tostring(luastate, -1));
@@ -816,12 +820,12 @@ static OutputCtx *OutputLuaLogInit(ConfNode *conf)
     if (unlikely(output_ctx == NULL)) {
         return NULL;
     }
+    output_ctx->DeInit = LogLuaMasterFree;
     output_ctx->data = SCCalloc(1, sizeof(LogLuaMasterCtx));
     if (unlikely(output_ctx->data == NULL)) {
         SCFree(output_ctx);
         return NULL;
     }
-    output_ctx->DeInit = LogLuaMasterFree;
     LogLuaMasterCtx *master_config = output_ctx->data;
     strlcpy(master_config->path, dir, sizeof(master_config->path));
     TAILQ_INIT(&output_ctx->submodules);
@@ -877,6 +881,10 @@ static OutputCtx *OutputLuaLogInit(ConfNode *conf)
         } else if (opts.alproto == ALPROTO_SSH) {
             om->PacketLogFunc = LuaPacketLoggerSsh;
             om->PacketConditionFunc = LuaPacketConditionSsh;
+        } else if (opts.alproto == ALPROTO_SMTP) {
+            om->TxLogFunc = LuaTxLogger;
+            om->alproto = ALPROTO_SMTP;
+            AppLayerParserRegisterLogger(IPPROTO_TCP, ALPROTO_SMTP);
         } else if (opts.packet && opts.alerts) {
             om->PacketLogFunc = LuaPacketLoggerAlerts;
             om->PacketConditionFunc = LuaPacketConditionAlerts;
@@ -904,9 +912,8 @@ static OutputCtx *OutputLuaLogInit(ConfNode *conf)
     return output_ctx;
 
 error:
-    if (output_ctx->DeInit && output_ctx->data)
-        output_ctx->DeInit(output_ctx->data);
-    SCFree(output_ctx);
+    if (output_ctx->DeInit)
+        output_ctx->DeInit(output_ctx);
     return NULL;
 }
 

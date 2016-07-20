@@ -2343,6 +2343,7 @@ static int PostConfLoadedSetup(SCInstance *suri)
     /* Load the Host-OS lookup. */
     SCHInfoLoadFromConfig();
     if (suri->run_mode != RUNMODE_UNIX_SOCKET) {
+        Decode6LoWPANInit();
         DefragInit();
     }
 
@@ -2781,6 +2782,7 @@ int main(int argc, char **argv)
     SCProtoNameDeInit();
     if (suri.run_mode != RUNMODE_UNIX_SOCKET) {
         DefragDestroy();
+        Decode6LoWPANDestroy();
     }
     if (!suri.disabled_detect) {
         SCReferenceConfDeinit();

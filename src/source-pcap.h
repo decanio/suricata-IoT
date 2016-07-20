@@ -57,6 +57,8 @@ typedef struct PcapIfaceConfig_
     int snaplen;
     /* promiscuous value */
     int promisc;
+    /* is itron riva */
+    int itronriva;
     /* BPF filter */
     char *bpf_filter;
     ChecksumValidationMode checksum_mode;

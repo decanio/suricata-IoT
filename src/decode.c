@@ -382,6 +382,66 @@ void PacketDefragPktSetupParent(Packet *parent)
     DecodeSetNoPayloadInspectionFlag(parent);
 }
 
+/**
+ *  \brief Setup a pseudo packet (6LoWPAN)
+ *
+ *  Difference with PacketPseudoPktSetup is that this func doesn't increment
+ *  the recursion level. It needs to be on the same level as the compressed
+ *  packet because we run the flow engine against this and we need to get
+ *  the same flow.
+ *
+ *  \param parent parent packet for this pseudo pkt
+ *  \param pkt raw packet data
+ *  \param len packet data length
+ *  \param proto protocol of the tunneled packet
+ *
+ *  \retval p the pseudo packet or NULL if out of memory
+ */
+Packet *Packet6LoWPANPktSetup(Packet *parent, uint8_t *pkt, uint16_t len)
+{
+    SCEnter();
+
+#if 1
+    /* get us a packet */
+    Packet *p = PacketGetFromQueueOrAlloc();
+    if (unlikely(p == NULL)) {
+        SCReturnPtr(NULL, "Packet");
+    }
+
+#if 0
+    /* set the root ptr to the lowest layer */
+    if (parent->root != NULL)
+        p->root = parent->root;
+    else
+        p->root = parent;
+#else 
+    p->root = NULL;
+#endif
+
+    /* copy packet and set lenght, proto */
+    if (pkt && len) {
+        PacketCopyData(p, pkt, len);
+    }
+    p->recursion_level = parent->recursion_level; /* NOT incremented */
+    p->ts.tv_sec = parent->ts.tv_sec;
+    p->ts.tv_usec = parent->ts.tv_usec;
+    p->datalink = DLT_RAW;
+    p->tenant_id = parent->tenant_id;
+    /* tell new packet it's part of a tunnel */
+    p->vlan_id[0] = parent->vlan_id[0];
+    p->vlan_id[1] = parent->vlan_id[1];
+    p->vlan_idx = parent->vlan_idx;
+#else
+    Packet *p = PacketDefragPktSetup(parent, pkt, 0, IPPROTO_UDP);
+#endif
+
+    /* disable payload (not packet) inspection on the parent, as the payload
+     * is the packet we will now run through the system separately. We do
+     * check it against the ip/port/other header checks though */
+    DecodeSetNoPayloadInspectionFlag(parent);
+    SCReturnPtr(p, "Packet");
+}
+
 void DecodeRegisterPerfCounters(DecodeThreadVars *dtv, ThreadVars *tv)
 {
     /* register counters */
@@ -390,7 +450,13 @@ void DecodeRegisterPerfCounters(DecodeThreadVars *dtv, ThreadVars *tv)
     dtv->counter_invalid = StatsRegisterCounter("decoder.invalid", tv);
     dtv->counter_ipv4 = StatsRegisterCounter("decoder.ipv4", tv);
     dtv->counter_ipv6 = StatsRegisterCounter("decoder.ipv6", tv);
+    dtv->counter_6lowpan = StatsRegisterCounter("decoder.6lowpan", tv);
+    dtv->counter_6lowpan_uncompressed = StatsRegisterCounter("decoder.6lowpan_uncompressed", tv);
+    dtv->counter_6lowpan_fragment = StatsRegisterCounter("decoder.6lowpan_fragment", tv);
+    dtv->counter_6lowpan_reassembled = StatsRegisterCounter("decoder.6lowpan_reassembled", tv);
+    dtv->counter_zigbee = StatsRegisterCounter("decoder.zigbee", tv);
     dtv->counter_eth = StatsRegisterCounter("decoder.ethernet", tv);
+    dtv->counter_ieee802154 = StatsRegisterCounter("decoder.ieee802_15_4", tv);
     dtv->counter_raw = StatsRegisterCounter("decoder.raw", tv);
     dtv->counter_null = StatsRegisterCounter("decoder.null", tv);
     dtv->counter_sll = StatsRegisterCounter("decoder.sll", tv);
@@ -556,6 +622,9 @@ const char *PktSrcToString(enum PktSrcEnum pkt_src)
             break;
         case PKT_SRC_FFR:
             pkt_src_str = "stream (flow timeout)";
+            break;
+        case PKT_SRC_6LOWPAN:
+            pkt_src_str = "6lowpan";
             break;
     }
     return pkt_src_str;

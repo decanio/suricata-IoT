@@ -42,6 +42,7 @@
 #define ETHERNET_TYPE_LOOP            0x9000
 #define ETHERNET_TYPE_8021QINQ        0x9100
 #define ETHERNET_TYPE_ERSPAN          0x88BE
+#define ETHERNET_TYPE_IEEE802154      0x00f6
 
 typedef struct EthernetHdr_ {
     uint8_t eth_dst[6];

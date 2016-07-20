@@ -42,12 +42,14 @@ conf-yaml-loader.c conf-yaml-loader.h \
 counters.c counters.h \
 data-queue.c data-queue.h \
 decode.c decode.h \
+decode-6lowpan.c decode-6lowpan.h \
 decode-erspan.c decode-erspan.h \
 decode-ethernet.c decode-ethernet.h \
 decode-events.c decode-events.h \
 decode-gre.c decode-gre.h \
 decode-icmpv4.c decode-icmpv4.h \
 decode-icmpv6.c decode-icmpv6.h \
+decode-ieee-802154.c decode-ieee-802154.h \
 decode-ipv4.c decode-ipv4.h \
 decode-ipv6.c decode-ipv6.h \
 decode-null.c decode-null.h \
@@ -62,6 +64,7 @@ decode-udp.c decode-udp.h \
 decode-vlan.c decode-vlan.h \
 decode-mpls.c decode-mpls.h \
 decode-template.c decode-template.h \
+decode-zigbee.c decode-zigbee.h \
 defrag-config.c defrag-config.h \
 defrag.c defrag.h \
 defrag-hash.c defrag-hash.h \
@@ -364,6 +367,7 @@ util-lua-dns.c util-lua-dns.h \
 util-lua-http.c util-lua-http.h \
 util-lua-tls.c util-lua-tls.h \
 util-lua-ssh.c util-lua-ssh.h \
+util-lua-smtp.c util-lua-smtp.h \
 util-magic.c util-magic.h \
 util-memcmp.c util-memcmp.h \
 util-memcpy.h \

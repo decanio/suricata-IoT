@@ -100,6 +100,8 @@ uint8_t FlowGetProtoMapping(uint8_t proto)
             return FLOW_PROTO_ICMP;
         case IPPROTO_SCTP:
             return FLOW_PROTO_SCTP;
+        case PROTO_ZIGBEE:
+            return FLOW_PROTO_ZIGBEE;
         default:
             return FLOW_PROTO_DEFAULT;
     }
@@ -141,6 +143,11 @@ void FlowInit(Flow *f, const Packet *p)
         FLOW_SET_IPV6_SRC_ADDR_FROM_PACKET(p, &f->src);
         FLOW_SET_IPV6_DST_ADDR_FROM_PACKET(p, &f->dst);
         f->flags |= FLOW_IPV6;
+    } else if (PKT_IS_ZIGBEE(p)) {
+        FLOW_SET_ZIGBEE_SRC_ADDR_FROM_PACKET(p, &f->src);
+        FLOW_SET_ZIGBEE_DST_ADDR_FROM_PACKET(p, &f->dst);
+        f->zigbee_pan_id = p->ieee802154vars.dest_pid;
+        f->flags |= FLOW_ZIGBEE;
     }
 #ifdef DEBUG
     /* XXX handle default */
@@ -164,6 +171,8 @@ void FlowInit(Flow *f, const Packet *p)
     } else if (p->sctph != NULL) { /* XXX MACRO */
         SET_SCTP_SRC_PORT(p,&f->sp);
         SET_SCTP_DST_PORT(p,&f->dp);
+    } else if (p->zigbeeh != NULL) {
+        ;
     } /* XXX handle default */
 #ifdef DEBUG
     else {

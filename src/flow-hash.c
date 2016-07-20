@@ -104,6 +104,20 @@ typedef struct FlowHashKey6_ {
     };
 } FlowHashKey6;
 
+typedef struct FlowHashKeyZigBee_ {
+    union {
+        struct {
+            uint16_t pan_id; /**< 802.15.4 PAN ID */
+            uint16_t zigbee_src;
+            uint16_t zigbee_dst;
+            uint16_t zigbee_version;
+            uint16_t zigbee_mcast;
+            uint16_t pad;
+        };
+        const uint32_t u32[3];
+    };
+} FlowHashKeyZigBee;
+
 /* calculate the hash key for this packet
  *
  * we're using:
@@ -222,6 +236,20 @@ static inline uint32_t FlowGetHash(const Packet *p)
         fhk.vlan_id[1] = p->vlan_id[1];
 
         hash = hashword(fhk.u32, 11, flow_config.hash_rand);
+    } else if (p->zigbeeh != NULL) {
+        FlowHashKeyZigBee fhk;
+        if (p->zigbeevars.source_address > p->zigbeevars.dest_address) {
+            fhk.zigbee_src = p->zigbeevars.source_address;
+            fhk.zigbee_dst = p->zigbeevars.dest_address;
+        } else {
+            fhk.zigbee_src = p->zigbeevars.dest_address;
+            fhk.zigbee_dst = p->zigbeevars.source_address;
+        }
+        fhk.pan_id = p->ieee802154vars.dest_pid;
+        fhk.zigbee_version = p->zigbeevars.version;
+        fhk.zigbee_mcast = p->zigbeevars.multicast;
+        fhk.pad = 0;    
+        hash = hashword(fhk.u32, 2, flow_config.hash_rand);
     }
 
     return hash;
@@ -299,6 +327,18 @@ void FlowSetupPacket(Packet *p)
 
 int TcpSessionPacketSsnReuse(const Packet *p, const Flow *f, void *tcp_ssn);
 
+static inline int FlowCompareZigBee(Flow *f, const Packet *p)
+{
+    if (f->proto == p->proto &&
+        (f->dst.addr_data32[0] == (uint32_t)(p->zigbeevars.dest_address) ) &&
+        (f->src.addr_data32[0] == (uint32_t)(p->zigbeevars.source_address) ) &&
+        f->recursion_level == p->recursion_level &&
+        f->zigbee_pan_id == p->ieee802154vars.dest_pid) {
+        return 1;
+    }
+    return 0;
+}
+
 static inline int FlowCompare(Flow *f, const Packet *p)
 {
     if (p->proto == IPPROTO_ICMP) {
@@ -313,6 +353,8 @@ static inline int FlowCompare(Flow *f, const Packet *p)
             return 0;
 
         return 1;
+    } else if (p->proto == PROTO_ZIGBEE) {
+        return FlowCompareZigBee(f, p);
     } else {
         return CMP_FLOW(f, p);
     }

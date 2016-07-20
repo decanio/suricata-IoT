@@ -83,6 +83,7 @@ void *ParsePcapConfig(const char *iface)
     char *tmpctype;
     intmax_t value;
     int promisc = 0;
+    int itronriva = 0;
     intmax_t snaplen = 0;
 
     if (unlikely(aconf == NULL)) {
@@ -214,6 +215,14 @@ void *ParsePcapConfig(const char *iface)
         aconf->snaplen = snaplen;
     }
 
+    aconf->itronriva = 0;
+    if (ConfGetChildValueBoolWithDefault(if_root, if_default, "itronriva", &itronriva) != 1) {
+        SCLogDebug("could not get itronriva or none specified");
+    } else {
+        aconf->itronriva = itronriva;
+    }
+
+    aconf->snaplen = 0;
 
     return aconf;
 }
