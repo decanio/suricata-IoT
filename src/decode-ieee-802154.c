@@ -38,6 +38,9 @@
 
 #include "util-unittest.h"
 #include "util-debug.h"
+#include "util-print.h"
+
+//#define PRINT
 
 /* Precomputed partial CRC table. */
 static const uint16_t    crc_tabccitt[256] = {
@@ -233,6 +236,12 @@ static int _DecodeIEEE802154(ThreadVars *tv, DecodeThreadVars *dtv, Packet *p,
     uint32_t has_src_panid, has_dest_panid;
 
     StatsIncr(tv, dtv->counter_ieee802154);
+
+#ifdef PRINT
+    printf("raw 802.15.4 %s FCS-----(pcap_cnt: %lu)\n", (fcs)?"":"no", p->pcap_cnt);
+    PrintRawDataFp(stdout, GET_PKT_DATA(p), GET_PKT_LEN(p));
+    printf("-------------------------\n");
+#endif
 
     /* Validation: make sure that the input data is big enough to hold
      *             the header */

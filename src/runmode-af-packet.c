@@ -143,6 +143,7 @@ void *ParseAFPConfig(const char *iface)
     aconf->promisc = 1;
     aconf->checksum_mode = CHECKSUM_VALIDATION_KERNEL;
     aconf->DerefFunc = AFPDerefConfig;
+    aconf->itronriva = 0;
     aconf->flags = AFP_RING_MODE;
     aconf->bpf_filter = NULL;
     aconf->out_iface = NULL;
@@ -391,6 +392,13 @@ void *ParseAFPConfig(const char *iface)
         } else {
             SCLogError(SC_ERR_INVALID_ARGUMENT, "Invalid value for checksum-checks for %s", aconf->iface);
         }
+    }
+
+    aconf->itronriva = 0;
+    if (ConfGetChildValueBoolWithDefault(if_root, if_default, "itronriva", &boolval) != 1) {
+        SCLogDebug("could not get itronriva or none specified");
+    } else {
+        aconf->itronriva = boolval;
     }
 
 finalize:

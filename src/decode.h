@@ -1069,6 +1069,7 @@ int DecoderParseDataFromFile(char *filename, DecoderFunc Decoder);
 #define LINKTYPE_RAW        DLT_RAW
 #define PPP_OVER_GRE        11
 #define VLAN_OVER_GRE       13
+#define LINKTYPE_RAW_IPV6   DLT_USER0   /* raw IPv6 packet from Itron Riva stack */
 
 /*Packet Flags*/
 #define PKT_NOPACKET_INSPECTION         (1)         /**< Flag to indicate that packet header or contents should not be inspected*/
