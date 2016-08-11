@@ -1303,6 +1303,51 @@
     fi
 
 
+  # libcoap
+
+    # test if we have a bundled coap
+    if test -d "$srcdir/libcoap"; then
+
+      AC_CONFIG_SUBDIRS([libcoap])
+      COAP_DIR="libcoap"
+      AC_SUBST(COAP_DIR)
+      COAP_LDADD="/usr/local/lib/libcoap.la"
+      AC_SUBST(COAP_LDADD)
+      # make sure libcoap is added to the includes
+      CPPFLAGS="-I\${srcdir}/../libcoap/ -I\${srcdir}/../libcoap/include/coap/ ${CPPFLAGS}"
+
+      AC_ARG_WITH(libcoap_includes,
+              [  --with-libcoap-includes=DIR  libcoap include directory],
+              [with_libcoap_includes="$withval"],[with_libcoap_includes=no])
+      AC_ARG_WITH(libcoap_libraries,
+              [  --with-libcoap-libraries=DIR    libcoap library directory],
+              [with_libcoap_libraries="$withval"],[with_libcoap_libraries="no"])
+
+      if test "$with_libcoap_includes" != "no"; then
+          CPPFLAGS="-I${with_libcoap_includes} ${CPPFLAGS}"
+      fi
+
+      if test "$with_libcoap_libraries" != "no"; then
+          LDFLAGS="${LDFLAGS} -L${with_libcoap_libraries}"
+      fi
+
+      #AC_CHECK_HEADER(coap_config.h,,[AC_ERROR(coap_config.h not found ...)])
+      #AC_CHECK_HEADER(coap.h,,[AC_ERROR(coap.h not found ...)])
+      #AC_CHECK_LIB(coap, coap_pdu_parse,, COAP="no")
+      #LDFLAGS="${LDFLAGS} -L/usr/local/lib -lcoap"
+    else
+      echo
+      echo "  ERROR: libcoap is not bundled. Get libcoap by doing:"
+      echo "     git clone https://github.com/obgm/libcoap"
+      echo "  Then re-run Suricata's autogen.sh and configure script."
+      echo "  Or, if libcoap is installed in a different location,"
+      echo "  pass --enable-non-bundled-coap to Suricata's configure script."
+      echo "  Add --with-libcoap-includes=<dir> and --with-libcoap-libraries=<dir> if"
+      echo "  libcoap is not installed in the include and library paths."
+      echo
+      exit 1
+    fi
+
   # enable CUDA output
     AC_ARG_ENABLE(cuda,
            AS_HELP_STRING([--enable-cuda], [Enable experimental CUDA pattern matching]),,[enable_cuda=no])

@@ -1,4 +1,4 @@
-#! /bin/sh
+#!/bin/bash
 #
 # Script to provision a new application layer detector and parser.
 
