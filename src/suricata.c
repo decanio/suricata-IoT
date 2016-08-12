@@ -103,6 +103,7 @@
 
 #include "output-json.h"
 
+#include "output-json-coap.h"
 #include "output-json-template.h"
 
 #include "stream-tcp.h"
@@ -908,6 +909,8 @@ void RegisterAllModules()
     /* json stats */
     TmModuleJsonStatsLogRegister();
 
+    /* COAP JSON logger. */
+    TmModuleJsonCOAPLogRegister();
     /* Template JSON logger. */
     TmModuleJsonTemplateLogRegister();
 
