@@ -35,18 +35,6 @@
 
 #include "app-layer-coap.h"
 
-#if 0
-#define WITH_POSIX /* Keep COAP happy */
-#undef PACKAGE_BUGREPORT
-#undef PACKAGE_NAME
-#undef PACKAGE_STRING
-#undef PACKAGE_TARNAME
-#undef PACKAGE_URL
-#undef PACKAGE_VERSION
-#include <coap_config.h>
-#include <coap.h>
-#endif
-
 /* The minimum size for an echo message. For some protocols this might
  * be the size of a header. */
 #define COAP_MIN_FRAME_LEN 1
@@ -104,7 +92,7 @@ static void COAPTxFree(void *tx)
 
 static void *COAPStateAlloc(void)
 {
-    SCLogNotice("Allocating COAP state.");
+    SCLogDebug("Allocating COAP state.");
     COAPState *state = SCCalloc(1, sizeof(COAPState));
     if (unlikely(state == NULL)) {
         return NULL;
@@ -117,7 +105,7 @@ static void COAPStateFree(void *state)
 {
     COAPState *COAP_state = state;
     COAPTransaction *tx;
-    SCLogNotice("Freeing COAP state.");
+    SCLogDebug("Freeing COAP state.");
     while ((tx = TAILQ_FIRST(&COAP_state->tx_list)) != NULL) {
         TAILQ_REMOVE(&COAP_state->tx_list, tx, next);
         COAPTxFree(tx);
@@ -136,7 +124,7 @@ static void COAPStateTxFree(void *state, uint64_t tx_id)
     COAPState *echo = state;
     COAPTransaction *tx = NULL, *ttx;
 
-    SCLogNotice("Freeing transaction %"PRIu64, tx_id);
+    SCLogDebug("Freeing transaction %"PRIu64, tx_id);
 
     TAILQ_FOREACH_SAFE(tx, &echo->tx_list, next, ttx) {
 
@@ -152,7 +140,7 @@ static void COAPStateTxFree(void *state, uint64_t tx_id)
         return;
     }
 
-    SCLogNotice("Transaction %"PRIu64" not found.", tx_id);
+    SCLogDebug("Transaction %"PRIu64" not found.", tx_id);
 }
 
 static int COAPStateGetEventInfo(const char *event_name, int *event_id,
@@ -210,14 +198,14 @@ static AppProto COAPProbingParser(uint8_t *input, uint32_t input_len,
 
             if (result > 0) {
                 coap_free_type(0, pdu);
-                SCLogNotice("Detected as ALPROTO_COAP.");
+                SCLogDebug("Detected as ALPROTO_COAP.");
                 return ALPROTO_COAP;
             }
         }
         coap_free_type(0, pdu);
     }
 
-    SCLogNotice("Protocol not detected as ALPROTO_COAP.");
+    SCLogDebug("Protocol not detected as ALPROTO_COAP.");
     return ALPROTO_UNKNOWN;
 }
 
@@ -225,10 +213,11 @@ static int COAPParseRequest(Flow *f, void *state,
     AppLayerParserState *pstate, uint8_t *input, uint32_t input_len,
     void *local_data)
 {
-    COAPState *echo = state;
+    COAPState *coap = state;
+    COAPTransaction *tx = NULL, *ttx;;
     int result;
 
-    SCLogNotice("Parsing COAP request: len=%"PRIu32, input_len);
+    SCLogDebug("Parsing COAP request: len=%"PRIu32, input_len);
 
     /* Likely connection closed, we can just return here. */
     if ((input == NULL || input_len == 0) &&
@@ -246,52 +235,60 @@ static int COAPParseRequest(Flow *f, void *state,
      * transaction object, but as this is echo, we'll just record the
      * request data. */
     coap_pdu_t *pdu = coap_pdu_init(0, 0, 0, COAP_MAX_PDU_SIZE);
-    if (pdu != NULL) {
-        result = coap_pdu_parse(input, input_len, pdu);
+    if (pdu == NULL)  {
+        return 0;
+    }
 
-        if (result > 0) {
-            /* Allocate a transaction.
-             *
-             * But note that if a "protocol data unit" is not received in one
-             * chunk of data, and the buffering is done on the transaction, we
-             * may need to look for the transaction that this newly recieved
-             * data belongs to.
-             */
-            COAPTransaction *tx = COAPTxAlloc(echo);
-            if (unlikely(tx == NULL)) {
-                SCLogNotice("Failed to allocate new COAP tx.");
-                goto end;
-            }
-            SCLogNotice("Allocated COAP tx %"PRIu64".", tx->tx_id);
+    result = coap_pdu_parse(input, input_len, pdu);
+
+    /* Look up any existing transaction for this request. */
+
+    /* We should just grab the last transaction, but this is to
+     * illustrate how you might traverse the transaction list to find
+     * the transaction associated with this response. */
+    TAILQ_FOREACH(ttx, &coap->tx_list, next) {
+        tx = ttx;
+        if (tx->response_pdu && (tx->response_pdu->hdr->id == pdu->hdr->id)) {
+            break;
+        }
+    }
     
-            /* Make a copy of the request. */
-            tx->request_pdu = pdu;
+    if (ttx == NULL) {
+        SCLogDebug("Failed to find transaction for request on coap state %p.",
+            coap);
+
+        tx = COAPTxAlloc(coap);
+
+        if (tx == NULL) {
+            coap_free_type(0, tx->response_pdu);
+            return 0;
         }
     }
 
-#if 0
-    /* Here we check for an empty message and create an app-layer
-     * event. */
-    if ((input_len == 1 && tx->request_buffer[0] == '\n') ||
-        (input_len == 2 && tx->request_buffer[0] == '\r')) {
-        SCLogNotice("Creating event for empty message.");
-        AppLayerDecoderEventsSetEventRaw(&tx->decoder_events,
-            COAP_DECODER_EVENT_EMPTY_MESSAGE);
-        echo->events++;
+    SCLogDebug("Found transaction %"PRIu64" for response on coap state %p.",
+        tx->tx_id, coap);
+
+    if (result > 0) {
+
+        /* Record the request. */
+        tx->request_pdu = pdu;
+
+        /* Set the request_seen flag for transaction state checking in
+         * COAPGetStateProgress(). */
+        tx->request_seen = 1;
     }
-#endif
-end:    
+
     return 0;
 }
 
 static int COAPParseResponse(Flow *f, void *state, AppLayerParserState *pstate,
     uint8_t *input, uint32_t input_len, void *local_data)
 {
-    COAPState *echo = state;
+    COAPState *coap = state;
     COAPTransaction *tx = NULL, *ttx;;
     int result;
 
-    SCLogNotice("Parsing COAP response.");
+    SCLogDebug("Parsing COAP response.");
 
     /* Likely connection closed, we can just return here. */
     if ((input == NULL || input_len == 0) &&
@@ -305,79 +302,75 @@ static int COAPParseResponse(Flow *f, void *state, AppLayerParserState *pstate,
         return 0;
     }
 
-    /* Look up the existing transaction for this response. In the case
-     * of echo, it will be the most recent transaction on the
-     * COAPState object. */
+    coap_pdu_t *pdu = coap_pdu_init(0, 0, 0, COAP_MAX_PDU_SIZE);
+    if (pdu == NULL) {
+        return 0;
+    }
+
+    result = coap_pdu_parse(input, input_len, pdu);
+
+    /* Look up the existing transaction for this response. */
 
     /* We should just grab the last transaction, but this is to
      * illustrate how you might traverse the transaction list to find
      * the transaction associated with this response. */
-    TAILQ_FOREACH(ttx, &echo->tx_list, next) {
+    TAILQ_FOREACH(ttx, &coap->tx_list, next) {
         tx = ttx;
+        if (tx->request_pdu && (tx->request_pdu->hdr->id == pdu->hdr->id)) {
+            break;
+        }
     }
     
-    if (tx == NULL) {
-        SCLogNotice("Failed to find transaction for response on echo state %p.",
-            echo);
-        goto end;
-    }
+    if (ttx == NULL) {
+        SCLogDebug("Failed to find transaction for response on coap state %p.",
+            coap);
+        tx = COAPTxAlloc(coap);
 
-    SCLogNotice("Found transaction %"PRIu64" for response on echo state %p.",
-        tx->tx_id, echo);
-
-    /* If the protocol requires multiple chunks of data to complete, you may
-     * run into the case where you have existing response data.
-     *
-     * In this case, we just log that there is existing data and free it. But
-     * you might want to realloc the buffer and append the data.
-     */
-    if (tx->response_pdu != NULL) {
-        SCLogNotice("WARNING: Transaction already has response data, "
-            "existing data will be overwritten.");
-        coap_free_type(0, tx->response_pdu);
-    }
-    coap_pdu_t *pdu = coap_pdu_init(0, 0, 0, COAP_MAX_PDU_SIZE);
-    if (pdu != NULL) {
-        result = coap_pdu_parse(input, input_len, pdu);
-
-        if (result > 0) {
-
-            /* Make a copy of the response. */
-            tx->response_pdu = pdu;
-
-            /* Set the response_done flag for transaction state checking in
-             * COAPGetStateProgress(). */
-            tx->response_done = 1;
+        if (tx == NULL) {
+            coap_free_type(0, tx->response_pdu);
+            return 0;
         }
     }
 
-end:
+    SCLogDebug("Found transaction %"PRIu64" for response on coap state %p.",
+        tx->tx_id, coap);
+
+    if (result > 0) {
+
+        /* Record the response. */
+        tx->response_pdu = pdu;
+
+        /* Set the response_done flag for transaction state checking in
+         * COAPGetStateProgress(). */
+        tx->response_seen = 1;
+    }
+
     return 0;
 }
 
 static uint64_t COAPGetTxCnt(void *state)
 {
-    COAPState *echo = state;
-    SCLogNotice("Current tx count is %"PRIu64".", echo->transaction_max);
-    return echo->transaction_max;
+    COAPState *coap = state;
+    SCLogDebug("Current tx count is %"PRIu64".", coap->transaction_max);
+    return coap->transaction_max;
 }
 
 static void *COAPGetTx(void *state, uint64_t tx_id)
 {
-    COAPState *echo = state;
+    COAPState *coap = state;
     COAPTransaction *tx;
 
-    SCLogNotice("Requested tx ID %"PRIu64".", tx_id);
+    SCLogDebug("Requested tx ID %"PRIu64".", tx_id);
 
-    TAILQ_FOREACH(tx, &echo->tx_list, next) {
+    TAILQ_FOREACH(tx, &coap->tx_list, next) {
         if (tx->tx_id == tx_id) {
-            SCLogNotice("Transaction %"PRIu64" found, returning tx object %p.",
+            SCLogDebug("Transaction %"PRIu64" found, returning tx object %p.",
                 tx_id, tx);
             return tx;
         }
     }
 
-    SCLogNotice("Transaction ID %"PRIu64" not found.", tx_id);
+    SCLogDebug("Transaction ID %"PRIu64" not found.", tx_id);
     return NULL;
 }
 
@@ -420,20 +413,14 @@ static int COAPGetAlstateProgressCompletionStatus(uint8_t direction) {
  */
 static int COAPGetStateProgress(void *tx, uint8_t direction)
 {
-    COAPTransaction *echotx = tx;
+    COAPTransaction *coap = tx;
 
-    SCLogNotice("Transaction progress requested for tx ID %"PRIu64
-        ", direction=0x%02x", echotx->tx_id, direction);
+    SCLogDebug("Transaction progress requested for tx ID %"PRIu64
+        ", direction=0x%02x", coap->tx_id, direction);
 
-    if (direction & STREAM_TOCLIENT && echotx->response_done) {
+    if (coap->request_seen && coap->response_seen) {
         return 1;
     }
-    else if (direction & STREAM_TOSERVER) {
-        /* For echo, just the existence of the transaction means the
-         * request is done. */
-        return 1;
-    }
-
     return 0;
 }
 
@@ -554,7 +541,7 @@ void RegisterCOAPParsers(void)
             COAPGetEvents);
     }
     else {
-        SCLogNotice("COAP protocol parsing disabled.");
+        SCLogDebug("COAP protocol parsing disabled.");
     }
 
 #ifdef UNITTESTS

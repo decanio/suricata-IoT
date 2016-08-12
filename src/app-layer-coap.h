@@ -46,13 +46,16 @@ typedef struct COAPTransaction_ {
 
     coap_pdu_t *request_pdu;
 
-    /* flags indicating which loggers that have logged */
-    uint32_t logged;
 
     coap_pdu_t *response_pdu;
 
-    uint8_t response_done; /*<< Flag to be set when the response is
-                            * seen. */
+    /* flags indicating which loggers that have logged */
+    uint32_t logged : 1;
+
+    uint32_t request_seen : 1;  /*<< Flag to be set when the response is
+                                 * seen. */
+    uint32_t response_seen : 1; /*<< Flag to be set when the response is
+                                 * seen. */
 
     DetectEngineState *de_state;
 
