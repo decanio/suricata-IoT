@@ -40,8 +40,35 @@ void MQTTParserRegisterTests(void);
 #define MQTT_PINGRESP     13
 #define MQTT_DISCONNECT   14
 
+#define MQTT_CONN_ACCEPTED 0
+#define MQTT_CONN_BAD_VER  1
+#define MQTT_CONN_ID_REJ   2
+#define MQTT_CONN_SRV_UNAVAIL 3
+#define MQTT_CONN_BAD_LOGIN 4
+#define MQTT_CONN_NOT_AUTH 5
+
+#define MQTT_PING_ACKED   0
+#define MQTT_PING_LOST    1
 typedef struct MQTTPdu_ {
     uint8_t   packet_type; /**< Control packet type */
+    union {
+        struct {
+            uint8_t return_code;
+        } ConnAck;
+        struct {
+            uint16_t packet_identifier;
+            uint16_t topic_length;
+            uint8_t *topic;
+        } Subscribe;
+        struct {
+            uint16_t topic_length;
+            uint16_t data_length;
+            uint8_t *blob;
+        } Publish;
+        struct {
+            uint8_t status;
+        } Ping;
+    };
 } MQTTPdu;
 
 typedef struct MQTTTransaction_ {

@@ -81,6 +81,18 @@ static void MQTTTxFree(void *tx)
 {
     MQTTTransaction *MQTTtx = tx;
 
+    switch (MQTTtx->request_pdu.packet_type) {
+        case MQTT_SUBSCRIBE:
+            if (MQTTtx->request_pdu.Subscribe.topic != NULL)
+                SCFree(MQTTtx->request_pdu.Subscribe.topic);
+            break;
+        case MQTT_PUBLISH:
+            if (MQTTtx->request_pdu.Publish.blob != NULL)
+                SCFree(MQTTtx->request_pdu.Publish.blob);
+            break;
+        default:
+            break;
+    }
     AppLayerDecoderEventsFreeEvents(&MQTTtx->decoder_events);
 
     SCFree(tx);
@@ -263,6 +275,61 @@ static int MQTTParseConnect(uint8_t *input, uint32_t input_len, MQTTPdu *pdu)
     return rc;
 }
 
+static int MQTTParseConnectAck(uint8_t *input, uint32_t input_len, MQTTPdu *pdu)
+{
+    int rc = 0;
+    if (input_len == 2) {
+        if (input[0] == 0) {
+            pdu->ConnAck.return_code = input[1];
+            rc = 1;
+        }
+    }
+    return rc;
+}
+
+static int MQTTParseSubscribe(uint8_t *input, uint32_t input_len, MQTTPdu *pdu)
+{
+    int rc = 0;
+    uint16_t length;
+    if (input_len > 4) {
+        if (input[0] == 0) {
+            pdu->Subscribe.packet_identifier = input[0] << 8;
+            pdu->Subscribe.packet_identifier += input[1];
+
+
+            length = input[2] << 8;
+            length += input[3];
+            pdu->Subscribe.topic = SCMalloc(length);
+            if (unlikely(pdu->Subscribe.topic == NULL)) {
+                return 0;
+            }
+            pdu->Subscribe.topic_length = length;
+            memcpy(pdu->Subscribe.topic, &input[4], length);
+            rc = 1;
+        }
+    }
+    return rc;
+}
+
+static int MQTTParsePublish(uint8_t *input, uint32_t input_len, MQTTPdu *pdu)
+{
+    int rc = 0;
+    uint16_t length;
+    if (input_len > 2) {
+        length = input[0] << 8;
+        length += input[1];
+        pdu->Publish.blob = SCMalloc(input_len - 2);
+        if (unlikely(pdu->Publish.blob == NULL)) {
+            return 0;
+        }
+        pdu->Publish.topic_length = length;
+        pdu->Publish.data_length = input_len - length - 2;
+        memcpy(pdu->Publish.blob, &input[2], input_len - 2);
+        rc = 1;
+    }
+    return rc;
+}
+
 static int MQTTPduParse(uint8_t *input, uint32_t input_len, MQTTPdu *pdu)
 {
     int32_t remainingLength;
@@ -286,6 +353,13 @@ static int MQTTPduParse(uint8_t *input, uint32_t input_len, MQTTPdu *pdu)
                 }
                 break;
             case MQTT_CONNACK:
+                if (packetFlags != 0) {
+                    return 0;
+                }
+                if (input_len - 2 >= (uint32_t)remainingLength) {
+                    MQTTParseConnectAck(&input[consumed], remainingLength, pdu);
+                }
+                break;
             case MQTT_PUBACK:
             case MQTT_PUBREC:
             case MQTT_PUBCOMP:
@@ -298,14 +372,24 @@ static int MQTTPduParse(uint8_t *input, uint32_t input_len, MQTTPdu *pdu)
                     return 0;
                 }
                 break;
-            case MQTT_PUBREL:
             case MQTT_SUBSCRIBE:
+                if (packetFlags != 0x2) {
+                    return 0;
+                }
+                if (input_len - 2 >= (uint32_t)remainingLength) {
+                    MQTTParseSubscribe(&input[consumed], remainingLength, pdu);
+                }
+                break;
+            case MQTT_PUBREL:
             case MQTT_UNSUBSCRIBE:
                 if (packetFlags != 0x2) {
                     return 0;
                 }
                 break;
             case MQTT_PUBLISH:
+                if (input_len - 2 >= (uint32_t)remainingLength) {
+                    MQTTParsePublish(&input[consumed], remainingLength, pdu);
+                }
                 break;
             default:
                 return 0;
@@ -392,6 +476,9 @@ static int MQTTParseToServer(Flow *f, void *state,
                 if (tx->request_pdu.packet_type == MQTT_DISCONNECT) {
                     tx->response_done = 1;
                 }
+
+                /* TBD: make sure that there is only one outstanding PING
+                 * transaction. */
                 input += result;
                 input_len -= result;
             } else {
@@ -435,7 +522,8 @@ static int MQTTParseToClient(Flow *f, void *state, AppLayerParserState *pstate,
                     MQTTTransaction *tx = MQTTTxAlloc(mqtt);
                     if (likely(tx != NULL)) {
                         SCLogDebug("Allocated MQTT tx %"PRIu64".", tx->tx_id);
-                        tx->request_pdu.packet_type = pdu.packet_type;
+                        //tx->request_pdu.packet_type = pdu.packet_type;
+                        tx->request_pdu = pdu;
                         /* Mark PUBLISH done.  TBD: need to look at QOS value */
                         tx->response_done = 1;
                     }
@@ -464,8 +552,10 @@ static int MQTTParseToClient(Flow *f, void *state, AppLayerParserState *pstate,
                                     found = 1;
                                 break;
                             case MQTT_PINGRESP:
-                                if (tx->request_pdu.packet_type == MQTT_PINGREQ)
+                                if (tx->request_pdu.packet_type == MQTT_PINGREQ) {
+                                    tx->response_pdu.Ping.status = MQTT_PING_ACKED;
                                     found = 1;
+                                }
                                 break;
                             default:
                                 break;

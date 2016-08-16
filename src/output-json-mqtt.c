@@ -74,9 +74,30 @@ static char *MQTTPacketTypeStr(uint8_t packetType)
         case MQTT_DISCONNECT:
             return "disconnect";
         default:
-            return "Unknown";
+            return "unknown";
     }
 }
+
+static char *MQTTConnAckRetCodeStr(uint8_t return_code)
+{
+    switch (return_code) {
+        case MQTT_CONN_ACCEPTED:
+            return "accepted";
+        case MQTT_CONN_BAD_VER:
+            return "refused bad version";
+        case MQTT_CONN_ID_REJ:
+            return "refused bad version";
+        case MQTT_CONN_SRV_UNAVAIL:
+            return "refused server unavailable";
+        case MQTT_CONN_BAD_LOGIN:
+            return "refused bad username or password";
+        case MQTT_CONN_NOT_AUTH:
+            return "refused not authorized";
+        default:
+            return "unknown";
+    }
+}
+
 
 static int JsonMQTTLogger(ThreadVars *tv, void *thread_data,
     const Packet *p, Flow *f, void *state, void *tx, uint64_t tx_id)
@@ -84,6 +105,7 @@ static int JsonMQTTLogger(ThreadVars *tv, void *thread_data,
     MQTTTransaction *MQTTtx = tx;
     LogMQTTLogThread *thread = thread_data;
     json_t *js, *MQTTjs;
+    char *s;
 
     SCLogNotice("Logging MQTT transaction %"PRIu64".", MQTTtx->tx_id);
     
@@ -97,25 +119,42 @@ static int JsonMQTTLogger(ThreadVars *tv, void *thread_data,
         goto error;
     }
 
-        json_object_set_new(MQTTjs, "command", json_string(MQTTPacketTypeStr(MQTTtx->request_pdu.packet_type)));
-#if 0
-    /* Convert the request buffer to a string then log. */
-    char *request_buffer = BytesToString(MQTTtx->request_buffer,
-        MQTTtx->request_buffer_len);
-    if (request_buffer != NULL) {
-        json_object_set_new(MQTTjs, "request", json_string(request_buffer));
-        SCFree(request_buffer);
-    }
+    json_object_set_new(MQTTjs, "command", json_string(MQTTPacketTypeStr(MQTTtx->request_pdu.packet_type)));
+    switch (MQTTtx->request_pdu.packet_type) {
+        case MQTT_CONNECT:
+            json_object_set_new(MQTTjs, "reply", json_string(MQTTConnAckRetCodeStr(MQTTtx->response_pdu.ConnAck.return_code)));
 
-    /* Convert the response buffer to a string then log. */
-    char *response_buffer = BytesToString(MQTTtx->response_buffer,
-        MQTTtx->response_buffer_len);
-    if (response_buffer != NULL) {
-        json_object_set_new(MQTTjs, "response",
-            json_string(response_buffer));
-        SCFree(response_buffer);
+            break;
+        case MQTT_SUBSCRIBE:
+            s = BytesToString(MQTTtx->request_pdu.Subscribe.topic, 
+                              MQTTtx->request_pdu.Subscribe.topic_length);
+            if (s != NULL) {
+                json_object_set_new(MQTTjs, "topic", json_string(s));
+                SCFree(s);
+            }
+            break;
+        case MQTT_PUBLISH:
+            s = BytesToString(MQTTtx->request_pdu.Publish.blob, 
+                              MQTTtx->request_pdu.Publish.topic_length);
+            if (s != NULL) {
+                json_object_set_new(MQTTjs, "topic", json_string(s));
+                SCFree(s);
+            }
+            /* TBD: check to make sure each character is printable */
+            s = BytesToString(&MQTTtx->request_pdu.Publish.blob[MQTTtx->request_pdu.Publish.topic_length], 
+                              MQTTtx->request_pdu.Publish.data_length);
+            if (s != NULL) {
+                json_object_set_new(MQTTjs, "message", json_string(s));
+                SCFree(s);
+            }
+            break;
+            break;
+        case MQTT_PINGREQ:
+            json_object_set_new(MQTTjs, "status", json_string((MQTTtx->response_pdu.Ping.status == MQTT_PING_ACKED) ? "acked" : "lost"));
+            break;
+        default:
+            break;
     }
-#endif
 
     json_object_set_new(js, "mqtt", MQTTjs);
 
