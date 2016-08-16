@@ -103,6 +103,7 @@
 
 #include "output-json.h"
 
+#include "output-json-mqtt.h"
 #include "output-json-template.h"
 
 #include "stream-tcp.h"
@@ -908,6 +909,8 @@ void RegisterAllModules()
     /* json stats */
     TmModuleJsonStatsLogRegister();
 
+    /* MQTT JSON logger. */
+    TmModuleJsonMQTTLogRegister();
     /* Template JSON logger. */
     TmModuleJsonTemplateLogRegister();
 
