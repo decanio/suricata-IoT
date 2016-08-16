@@ -1,0 +1,371 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Suricata-IoT by decanio</title>
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-dark.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+    <script src="javascripts/respond.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <!--[if lt IE 8]>
+    <link rel="stylesheet" href="stylesheets/ie.css">
+    <![endif]-->
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+  </head>
+  <body>
+      <div id="header">
+        <nav>
+          <li class="fork"><a href="https://github.com/decanio/suricata-IoT">View On GitHub</a></li>
+          <li class="downloads"><a href="https://github.com/decanio/suricata-IoT/zipball/master">ZIP</a></li>
+          <li class="downloads"><a href="https://github.com/decanio/suricata-IoT/tarball/master">TAR</a></li>
+          <li class="title">DOWNLOADS</li>
+        </nav>
+      </div><!-- end header -->
+
+    <div class="wrapper">
+
+      <section>
+        <div id="title">
+          <h1>Suricata-IoT</h1>
+          <p></p>
+          <hr>
+          <span class="credits left">Project maintained by <a href="https://github.com/decanio">decanio</a></span>
+          <span class="credits right">Hosted on GitHub Pages &mdash; Theme by <a href="https://twitter.com/michigangraham">mattgraham</a></span>
+        </div>
+
+        <p>Welcome to suricata-IoT</p>
+
+<p>This repository contains extensions to the Suricata IDS/IPS/NSM to support Internet of Things (IoT) protocols, platforms and devices.</p>
+
+<p>Extensions found here currently include support for the following:</p>
+
+<h2>
+<a id="datalink-protocols" class="anchor" href="#datalink-protocols" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Datalink Protocols</h2>
+
+<ul>
+<li>
+<a href="http://en.wikipedia.org/wiki/IEEE_802.15.4">802.15.4</a> protocol decode</li>
+<li>
+<a href="http://www.zigbee.org/">ZigBee</a> protocol decode</li>
+<li>
+<a href="http://en.wikipedia.org/wiki/6LoWPAN">6LoWPAN</a> protocol decode</li>
+</ul>
+
+<p>This version of Suricata adds decoders for the datalink protocols commonly utilized in wireless IoT networks listed above.</p>
+
+<h2>
+<a id="application-layer-protocols" class="anchor" href="#application-layer-protocols" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Application Layer Protocols</h2>
+
+<ul>
+<li><a href="http://http://coap.technology/">Constrained Application Protocol (CoAP)</a></li>
+<li><a href="https://en.wikipedia.org/wiki/MQTT">MQTT</a></li>
+</ul>
+
+<p>In addition support is being added for these messaging protocols commonly used in IoT networks to communicate between IoT devices and applications typically hosted in the cloud.  The implementation of these protocols is still considered a work in progress.  Therefore their implementations can be found on their own feature branches in the source code repository and haven't yet been merged into the mainline IoT branches.</p>
+
+<p>The list of additional application layer protocols will likely be expanded over time as dictated by interest and demand.</p>
+
+<h2>
+<a id="platforms" class="anchor" href="#platforms" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Platforms:</h2>
+
+<ul>
+<li>
+<a href="https://www.raspberrypi.org/">Raspberry Pi</a> w/ <a href="http://openlabs.co/OSHW/Raspberry-Pi-802.15.4-radio">OpenLabs 2.4Ghz 802.15.4 radio</a>
+</li>
+<li>
+<a href="https://itronriva.com/">Itron Riva Edge</a> w/ <a href="https://itronriva.com/product/itron-riva-edge-rf-dev-kit/">Riva RF 900Mhz 802.15.4 radio</a>
+</li>
+</ul>
+
+<p>The code found in this code repository has been tested on these hardware platforms.  The code will probably run on similar platforms but hasn't been validated to date.</p>
+
+<p>Instructions for building the code for each of these platforms follows.</p>
+
+<h2>
+<a id="setting-up-suricata-iot-on-raspberry-pi" class="anchor" href="#setting-up-suricata-iot-on-raspberry-pi" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Setting up Suricata IoT on Raspberry Pi</h2>
+
+<p>Surcata has been built and tested on both the Raspberry Pi 2 and Raspberry Pi 3 boards running the <a href="https://www.raspberrypi.org/downloads/raspbian/">Raspbian OS</a> using the <a href="http://openlabs.co/OSHW/Raspberry-Pi-802.15.4-radio">OpenLabs Raspberry Pi 802.15.4 radio</a>.</p>
+
+<p>A picture of the Raspberry Pi with the OpenLabs radio installed can be found <a href="https://goo.gl/photos/Gr1hqFieQ25DzXts9">here</a>.</p>
+
+<p>The Suricata setup on the Raspberry Pi with the OpenLabs 802.15.4 radio monitors raw 802.15.4 packets delivered to suricata from the network stack.  Suricata is able to decode the 802.15.4 packets containing both the ZigBee protocol or alternatively IPv6 carried over the 6LoWPAN encapsulation.</p>
+
+<p>ZigBee carries network packets that generally do not contain IP packets.  Suricata has been extended to decode ZigBee packets and track flows between ZigBee endpoints.  Suricata's eve-log logging facility will log ZigBee flows in a manner similar to IP flows.  The ability to write rules against ZigBee traffic is being developed but has not yet been completed to the point where I'm making it available in this github repository.</p>
+
+<p>6LoWPAN is an adaption layer that enables carrying IPv6 traffic over an 802.15.4 radio network.  With the addition of the ability to decode 6LoWPAN traffic all of suricata's IPv6 capabilities become available over a 6LoWPAN packet network.</p>
+
+<h3>
+<a id="building-a-linux-kernel-for-the-raspberry-pi-with-openlabs-802154-radio-support" class="anchor" href="#building-a-linux-kernel-for-the-raspberry-pi-with-openlabs-802154-radio-support" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Building a Linux kernel for the Raspberry Pi with OpenLabs 802.15.4 radio support</h3>
+
+<p>The Linux kernel delivered with Raspbian does not properly support the OpenLabs 802.15.4 radio with a working network stack.  To get things to work requires cross compiling a more up-to-date kernel and installing it on the Raspberry Pi.</p>
+
+<p>Follow the instructions here <a href="https://github.com/RIOT-OS/RIOT/wiki/How-to-install-6LoWPAN-Linux-Kernel-on-Raspberry-Pi">https://github.com/RIOT-OS/RIOT/wiki/How-to-install-6LoWPAN-Linux-Kernel-on-Raspberry-Pi</a> to build an install the required kernel.</p>
+
+<h3>
+<a id="building-and-running-suricata-on-the-raspberry-pi" class="anchor" href="#building-and-running-suricata-on-the-raspberry-pi" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Building and Running Suricata on the Raspberry Pi</h3>
+
+<p>Log into your Raspberry Pi running your newly installed kernel.</p>
+
+<p>Prepare your Raspberry Pi's build environment using:</p>
+
+<pre><code>sudo apt-get -y install libpcre3 libpcre3-dbg libpcre3-dev \
+build-essential autoconf automake libtool libpcap-dev libnet1-dev \
+libyaml-0-2 libyaml-dev pkg-config zlib1g zlib1g-dev libcap-ng-dev libcap-ng0 \
+make libmagic-dev libjansson-dev
+
+sudo apt-get install git-core
+</code></pre>
+
+<p>Now download the suricata source code from this repository using:</p>
+
+<pre><code>git clone -b feature/IoT-v7 git@github.com:decanio/suricata-IoT.git
+</code></pre>
+
+<p>Now build the code:</p>
+
+<pre><code>cd suricata-IoTgit
+git clone https://github.com/OISF/libhtp
+./autogen.sh
+./configure
+make
+</code></pre>
+
+<p>And finally install suricata and along with a full configuration:</p>
+
+<pre><code>sudo make install-full
+sudo ldconfig
+</code></pre>
+
+<p>To prepare the 802.15.4 radio for monitoring perform the following steps:</p>
+
+<pre><code>sudo iwpan phy phy0 set channel 0 11
+sudo iwpan dev wpan0 del
+sudo iwpan phy phy0 interface add mon0 type monitor
+sudo ifconfig mon0 up promisc
+</code></pre>
+
+<p>Alternatively, I've created a startup.sh script I use to avoid running these commands repeatedly containing the following:</p>
+
+<pre><code>#!/bin/sh
+iwpan phy phy0 set channel 0 11
+iwpan dev wpan0 del
+iwpan phy phy0 interface add mon0 type monitor
+ifconfig mon0 up promisc
+</code></pre>
+
+<p>which can be run with:</p>
+
+<pre><code>sudo ./startup.sh
+</code></pre>
+
+<p>Now to run suricata capturing packets from the 802.15.4 radio mon0 monitoring interface we created use:</p>
+
+<pre><code>suricata -c suricata/suricata.yaml --pcap=mon0 --runmode=single
+</code></pre>
+
+<h2>
+<a id="setting-up-suricata-iot-on-the-itron-riva-edge" class="anchor" href="#setting-up-suricata-iot-on-the-itron-riva-edge" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Setting up Suricata IoT on the <a href="https://itronriva.com/">Itron Riva Edge</a>
+</h2>
+
+<p>The <a href="https://itronriva.com/product/itron-riva-edge-rf-dev-kit/">Itron RF board</a> is a 900Mhz 802,15.4 radio built to reach longer distances than the 2.4Ghz 802.15.4 radio used on the Raspberry Pi.  The Itron Riva's RF radio carries IPv6 traffic over 6LoWPAN.</p>
+
+<p>A picture of a small network of Itron Riva boards can be found <a href="https://goo.gl/photos/ZjNTkjpnfr19Hyv38">here</a>.</p>
+
+<p>At the time of this writing the network stack supporting the Itron RF board delivers IPv6 packets to the packet sniffing interface.  Therefore suricata does not have visibility into the operation of the layers beneath IPv6.  I'm told that future version of the network stack may provide more visibility.</p>
+
+<p>So therefore suricata running on the Itron Riva Edge will only support its operation at and above the IPv6 layer.  A special Itron specific switch has been added to suricata to support this mode of operation.</p>
+
+<h2>
+<a id="setting-up-suricata-iot-on-the-itron-riva-edge-1" class="anchor" href="#setting-up-suricata-iot-on-the-itron-riva-edge-1" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Setting up Suricata IoT on the Itron Riva Edge</h2>
+
+<p>Running suricata on the Itron Riva uses the stock kernel and runtime environment delivered with the Itron Riva Edge.  However, a native code development environment is not supported on the Itron Riva Edge.  Therefore cross compiling suricata for the Itron Riva Edge is necessary.</p>
+
+<h3>
+<a id="building-and-running-suricata-for-the-itron-riva-edge" class="anchor" href="#building-and-running-suricata-for-the-itron-riva-edge" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Building and Running Suricata for the Itron Riva Edge</h3>
+
+<p>Set up the Itron cross development environment by following the instructions in the <a href="https://itronriva.com/article/itron-riva-edge-sdk-setup-guide/">Itron Riva Edge SDK Setup Guide</a>.</p>
+
+<p>Before moving onto building suricata its probably worth proving that you can build and run the "Hello Itron Riva" example application described in the SDK Setup Guide.</p>
+
+<p>Building suricata involves downloading and cross compiling several dependent libraries and then finally cross compiling and linking suricata.  Finally all of the pieces required to install suricata are copied to the Itron Riva Edge board.</p>
+
+<p>Cross compiling suricata for the Itron Riva was done on a machine running Ubuntu Linux 16.04 LTS.</p>
+
+<p>First create a work directory:</p>
+
+<pre><code>mkdir -p $HOME/work/itronriva
+</code></pre>
+
+<p>Get a minimal set of dependent libraries using the Ubuntu code repository <em>(note that the Itron Riva runtime environment is similar enough to Ubuntu that these seem to work)</em>:</p>
+
+<pre><code>cd $HOME/work/itronriva
+apt-get source libjansson-dev
+apt-get source libpcap-dev
+apt-get source libyaml-dev
+apt-get source libpcre3-dev
+apt-get source file
+</code></pre>
+
+<p>Create a build target directory on your cross development host:</p>
+
+<pre><code>mkdir -p $HOME/work/itronriva/target/usr
+</code></pre>
+
+<p>Build the dependent libraries:</p>
+
+<p>Build libpcap:</p>
+
+<pre><code>cd $HOME/work/itronriva/libpcap-1.7.4
+./configure --host=armv7l-timesys-linux-uclibcgnueabi --with-pcap=linux --prefix=$HOME/work/itronriva/target/usr
+make
+make install
+</code></pre>
+
+<p>Build libjansson:</p>
+
+<pre><code>cd $HOME/work/itronriva/jansson-2.7
+./configure --host=armv7l-timesys-linux-uclibcgnueabi --prefix=$HOME/work/itronriva/target/usr
+make
+make install
+</code></pre>
+
+<p>Build libyaml:</p>
+
+<pre><code>cd $HOME/work/itronriva/libyaml-0.1.6
+./configure --host=armv7l-timesys-linux-uclibcgnueabi --prefix=$HOME/work/itronriva/target/usr
+make
+make install
+</code></pre>
+
+<p>Build libpcre:</p>
+
+<pre><code>cd $HOME/work/itronriva/pcre3-8.38
+./configure --host=armv7l-timesys-linux-uclibcgnueabi --prefix=$HOME/work/itronriva/target/usr
+make
+make install
+</code></pre>
+
+<p>Build libmagic:</p>
+
+<pre><code>cd $HOME/work/itronriva/file-5.25
+./configure --host=armv7l-timesys-linux-uclibcgnueabi --prefix=$HOME/work/itronriva/target/usr
+make
+make install
+</code></pre>
+
+<p><em>Note the build and installation of libmagic desribed here doesn't quite work.  Therefore libmagic support in this Itron Riva version of suricata has been disabled until this is sorted out.</em></p>
+
+<p>Now download the suricata source code from this repository using:</p>
+
+<pre><code>cd $HOME/work/itronriva
+git clone -b feature/IoT-v7-riva git@github.com:decanio/suricata-IoT.git
+</code></pre>
+
+<p>Now build the code:</p>
+
+<pre><code>cd suricata-IoT
+git clone https://github.com/OISF/libhtp
+./autogen.sh
+./configure --host=armv7l-timesys-linux-uclibcgnueabi \
+            --with-libpcre-includes=$HOME/work/itronriva/target/usr/include \
+            --with-libpcre-libraries=$HOME/work/itronriva/target/usr/lib \
+            --with-libyaml-includes=$HOME/work/itronriva/target/usr/include \
+            --with-libyaml-libraries=$HOME/work/itronriva/target/usr/lib \
+            --with-libpcap-includes=$HOME/work/itronriva/target/usr/include \
+            --with-libpcap-libraries=$HOME/work/itronriva/target/usr/lib \
+            --with-libmagic-includes=$HOME/work/itronriva/target/usr/include \
+            --with-libmagic-libraries=$HOME/work/itronriva/target/usr/lib \
+            --with-libjansson-includes=$HOME/work/itronriva/target/usr/include \
+            --with-libjansson-libraries=$HOME/work/itronriva/target/usr/lib \
+            --prefix=$HOME/work/itronriva/target/usr/local
+make
+</code></pre>
+
+<p>Due to configuring suricata using <em>--prefix=$HOME/work/itronriva/target/usr/local</em> we need to fix up the suricata.yaml configuration file and the suricatasc script so that when we copy the target directory from the host to the target they will reference the directory used on the target.</p>
+
+<pre><code>cd $HOME/work/itronriva/target/usr/local/etc/suricata
+echo sSSS$HOME/work/itronriva/targetSSSSSSg &gt;script
+sed -i 's/\//\\\//g' script
+sed -i 's/SSS/\//g' script
+sed -f script -i suricata.yaml
+sed -f script -i $HOME/work/itronriva/target/usr/local/bin/suricatasc
+rm script
+</code></pre>
+
+<p>A script to perform the entire build operation is as follows:</p>
+
+<pre><code>#!/bin/sh
+mkdir -p $HOME/work/itronriva
+cd $HOME/work/itronriva
+apt-get source libjansson-dev
+apt-get source libpcap-dev
+apt-get source libyaml-dev
+apt-get source libpcre3-dev
+apt-get source file
+mkdir -p $HOME/work/itronriva/target/usr
+cd $HOME/work/itronriva/libpcap-1.7.4
+./configure --host=armv7l-timesys-linux-uclibcgnueabi --with-pcap=linux --prefix=$HOME/work/itronriva/target/usr
+make
+make install
+cd $HOME/work/itronriva/jansson-2.7
+./configure --host=armv7l-timesys-linux-uclibcgnueabi --prefix=$HOME/work/itronriva/target/usr
+make
+make install
+cd $HOME/work/itronriva/libyaml-0.1.6
+./configure --host=armv7l-timesys-linux-uclibcgnueabi --prefix=$HOME/work/itronriva/target/usr
+make
+make install
+cd $HOME/work/itronriva/pcre3-8.38
+./configure --host=armv7l-timesys-linux-uclibcgnueabi --prefix=$HOME/work/itronriva/target/usr
+make
+make install
+cd $HOME/work/itronriva/file-5.25
+./configure --host=armv7l-timesys-linux-uclibcgnueabi --prefix=$HOME/work/itronriva/target/usr
+make
+make install
+cd $HOME/work/itronriva
+git clone -b feature/IoT-v7-riva git@github.com:decanio/suricata-IoT.git
+cd suricata-IoT
+git clone https://github.com/OISF/libhtp
+./autogen.sh
+./configure --host=armv7l-timesys-linux-uclibcgnueabi \
+            --with-libpcre-includes=$HOME/work/itronriva/target/usr/include \
+            --with-libpcre-libraries=$HOME/work/itronriva/target/usr/lib \
+            --with-libyaml-includes=$HOME/work/itronriva/target/usr/include \
+            --with-libyaml-libraries=$HOME/work/itronriva/target/usr/lib \
+            --with-libpcap-includes=$HOME/work/itronriva/target/usr/include \
+            --with-libpcap-libraries=$HOME/work/itronriva/target/usr/lib \
+            --with-libmagic-includes=$HOME/work/itronriva/target/usr/include \
+            --with-libmagic-libraries=$HOME/work/itronriva/target/usr/lib \
+            --with-libjansson-includes=$HOME/work/itronriva/target/usr/include \
+            --with-libjansson-libraries=$HOME/work/itronriva/target/usr/lib \
+            --prefix=$HOME/work/itronriva/target/usr/local
+make
+make install-full
+cd $HOME/work/itronriva/target/usr/local/etc/suricata
+echo sSSS$HOME/work/itronriva/targetSSSSSSg &gt;script
+sed -i 's/\//\\\//g' script
+sed -i 's/SSS/\//g' script
+sed -f script -i suricata.yaml
+sed -f script -i $HOME/work/itronriva/target/usr/local/bin/suricatasc
+rm script
+</code></pre>
+
+<h2>
+<a id="todo" class="anchor" href="#todo" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>TODO</h2>
+
+<p>Expect these instructions to be enhanced and updated over time.</p>
+
+<p>If you find errors or omissions in these instructions don't hesitate to contact decanio.tom at gmail.com</p>
+      </section>
+
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+    
+  </body>
+</html>
